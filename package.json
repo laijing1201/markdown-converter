@@ -14,7 +14,7 @@
   "build": {
     "appId": "com.markdoc.app",
     "productName": "MarkDoc",
-    "icon": "public/icon.png",
+    "icon": "public/icon-v3.png",
     "directories": {
       "output": "release"
     },
