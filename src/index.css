@@ -1,0 +1,265 @@
+@import 'katex/dist/katex.min.css';
+@import 'highlight.js/styles/github.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.dark .hljs {
+  background: transparent;
+}
+
+/* ── Paper-like preview typography ──────────────────────────────────────── */
+
+#preview-container {
+  font-family: SimSun, STSong, 'Songti SC', NSimSun, serif;
+  color: #333333;
+}
+
+#preview-container h1,
+#preview-container h2,
+#preview-container h3,
+#preview-container h4,
+#preview-container h5,
+#preview-container h6 {
+  font-family: -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', 'PingFang SC', sans-serif;
+}
+
+#preview-container h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #1e40af;
+  margin: 1.5em 0 0.8em;
+  padding-bottom: 0.3em;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+#preview-container h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1e40af;
+  margin: 1.3em 0 0.6em;
+}
+
+#preview-container h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #374151;
+  margin: 1.2em 0 0.5em;
+}
+
+#preview-container h4 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #4b5563;
+  margin: 1.1em 0 0.4em;
+}
+
+#preview-container p {
+  line-height: 1.8;
+  margin: 0 0 1em;
+  text-indent: 0;
+  text-align: justify;
+}
+
+#preview-container ul,
+#preview-container ol {
+  padding-left: 2em;
+  margin: 0.5em 0 1em;
+}
+
+#preview-container li {
+  text-indent: 0;
+  line-height: 1.8;
+  margin-bottom: 0.3em;
+}
+
+#preview-container li p {
+  text-indent: 0;
+  margin: 0;
+}
+
+#preview-container pre {
+  background: #f6f8fa;
+  border-radius: 6px;
+  border: 1px solid #d0d7de;
+  padding: 1em;
+  margin: 1em 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  overflow-x: auto;
+  text-indent: 0;
+  color: #24292f;
+}
+
+#preview-container code {
+  font-family: 'Consolas', 'SFMono-Regular', Menlo, monospace;
+  font-size: 0.9em;
+  color: #d92d20;
+  background: #fdf2f2;
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+}
+
+#preview-container pre code {
+  color: inherit;
+  background: transparent;
+  padding: 0;
+}
+
+#preview-container table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.9rem;
+}
+
+#preview-container thead {
+  border-top: 2px solid #374151;
+  border-bottom: 1px solid #374151;
+}
+
+#preview-container tbody {
+  border-bottom: 2px solid #374151;
+}
+
+#preview-container th {
+  background: #f9fafb;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border: none;
+}
+
+#preview-container td {
+  padding: 6px 12px;
+  text-align: left;
+  border: none;
+}
+
+#preview-container tr {
+  border: none;
+}
+
+#preview-container blockquote {
+  border-left: 4px solid #d1d5db;
+  margin: 1em 0;
+  padding: 0.5em 1.2em;
+  color: #6b7280;
+  background: #f9fafb;
+  font-style: italic;
+  text-indent: 0;
+  border-radius: 0 4px 4px 0;
+}
+
+#preview-container img {
+  max-width: 100%;
+  display: block;
+  margin: 1em auto;
+}
+
+#preview-container .math-block {
+  text-align: center;
+  margin: 1em 0;
+  text-indent: 0;
+}
+
+#preview-container .math-inline {
+  text-indent: 0;
+}
+
+#preview-container hr {
+  margin: 2em 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+#preview-container ul.task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+#preview-container .task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+#preview-container .task-list-item input[type="checkbox"] {
+  margin-top: 0.4em;
+}
+
+/* Dark mode overrides */
+.dark #preview-container pre {
+  background: #1e293b;
+  border-left-color: #60a5fa;
+}
+
+.dark #preview-container thead {
+  border-top-color: #6b7280;
+  border-bottom-color: #6b7280;
+}
+
+.dark #preview-container tbody {
+  border-bottom-color: #6b7280;
+}
+
+.dark #preview-container th {
+  background: transparent;
+}
+
+.dark #preview-container blockquote {
+  background: #111827;
+  color: #9ca3af;
+  border-left-color: #6b7280;
+}
+
+.dark #preview-container h1 {
+  border-bottom-color: #374151;
+}
+
+/* ── Misc ───────────────────────────────────────────────────────────────── */
+
+.mermaid-error {
+  @apply border border-red-300 dark:border-red-700;
+}
+
+.math-inline,
+.math-block {
+  @apply inline;
+}
+.math-block {
+  @apply block text-center my-4;
+}
+
+/* ── Print Styles ───────────────────────────────────────────────────────── */
+
+@media print {
+  /* Hide the editor, toolbar, and anything else outside the preview */
+  body * {
+    visibility: hidden;
+  }
+  
+  /* Make the preview container and its children visible */
+  #preview-container, #preview-container * {
+    visibility: visible;
+  }
+  
+  /* Position the preview container at the top left of the page */
+  #preview-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    box-shadow: none !important;
+  }
+  
+  /* Academic paper print defaults */
+  @page {
+    size: A4;
+    margin: 20mm;
+  }
+}
