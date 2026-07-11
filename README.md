@@ -1,17 +1,23 @@
 # MarkDoc - Markdown 文档转换工具
 
-MarkDoc 是一个基于 React + TypeScript + Vite 的在线 Markdown 文档转换工具，，支持实时预览、LaTeX 数学公式、Mermaid 流程图渲染，以及一键导出为 DOCX 或 PDF 文件。
+MarkDoc 是一个基于 React + TypeScript + Vite 的在线 Markdown 文档转换工具，支持实时预览、LaTeX 数学公式、Mermaid 流程图渲染，以及一键导出为 DOCX 或 PDF 文件。
 
-## 功能特性
+## 🌐 在线体验
 
-- ✨ **Markdown 实时编辑与预览**：左侧使用 CodeMirror 编辑器，右侧实时渲染
+**[点击这里访问在线网页版 (部署于 Netlify)](https://sunny-peony-f88e90.netlify.app/)**
+
+## ✨ 功能特性
+
+- 📝 **Markdown 实时编辑与预览**：左侧使用 CodeMirror 编辑器，右侧实时渲染
 - 🧮 **LaTeX 数学公式**：支持行内 `$...$` 和块级 `$$...$$` 公式渲染（KaTeX）
 - 📊 **Mermaid 流程图**：支持流程图、时序图、甘特图等 Mermaid 图表
 - 💻 **代码语法高亮**：支持 JavaScript、Python、TypeScript、Java、C++ 等常见语言
 - 📋 **表格渲染**：支持 Markdown 表格的渲染与导出
 - 📄 **DOCX 导出**：将渲染后的文档导出为 `.docx` 文件
 - 📑 **PDF 导出**：将渲染后的文档导出为 A4 格式的 PDF 文件
-- 🌙 **暗色模式**：支持亮色/暗色主题切换
+- 🖥️ **Windows 桌面端**：支持打包为独立的 `.exe` 桌面应用程序
+- 🌙 **暗黑高级模式**：支持亮色/暗色主题切换，配合专属高级暗色应用图标
+- 🤖 **智能排版与修复**：支持一键修复乱码、深度修复格式
 - 🔒 **安全过滤**：使用 DOMPurify 进行 XSS 防护
 
 ## 技术栈
