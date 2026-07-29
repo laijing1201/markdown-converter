@@ -53,7 +53,7 @@ export async function exportToPdf(
         logging: false,
         backgroundColor: '#ffffff'
       },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
     }
 
     await html2pdf().set(opt).from(element).save()
