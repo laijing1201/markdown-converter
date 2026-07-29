@@ -37,19 +37,36 @@ export async function exportToPdf(
     }
   }
 
-  // Fallback to native browser print
-  // The @media print in index.css will hide everything except the preview container.
-  
-  // Temporarily change document title so the default save filename is correct
-  const originalTitle = document.title
-  document.title = filename
-  
-  window.print()
-  
-  // Restore title
-  setTimeout(() => {
-    document.title = originalTitle
-  }, 100)
+  // Fallback to web export using html2pdf.js for direct download
+  try {
+    const html2pdf = (await import('html2pdf.js')).default
+    
+    // We want to clone the element so we can temporarily apply some print styles just for the PDF rendering if needed
+    // But html2pdf takes care of most things. We can just pass the element.
+    const opt = {
+      margin:       15,
+      filename:     `${filename}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { 
+        scale: 2, 
+        useCORS: true, 
+        logging: false,
+        backgroundColor: '#ffffff'
+      },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    }
+
+    await html2pdf().set(opt).from(element).save()
+  } catch (error) {
+    console.error('html2pdf export failed:', error)
+    // Absolute fallback
+    const originalTitle = document.title
+    document.title = filename
+    window.print()
+    setTimeout(() => {
+      document.title = originalTitle
+    }, 100)
+  }
 }
 
 // ─── DOCX Export ─────────────────────────────────────────────────────────────
