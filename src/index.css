@@ -13,53 +13,101 @@
 
 #preview-container {
   font-family: SimSun, STSong, 'Songti SC', NSimSun, serif;
-  color: #333333;
+  color: #000000;
+  font-size: 16px; /* 小四 12pt */
 }
 
+/* Headings base */
 #preview-container h1,
 #preview-container h2,
 #preview-container h3,
 #preview-container h4,
 #preview-container h5,
 #preview-container h6 {
-  font-family: -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-family: SimHei, 'Heiti SC', STHeiti, sans-serif;
+  color: #000000;
+  border-bottom: none;
 }
 
-#preview-container h1 {
-  font-size: 1.8rem;
+/* Main Title (H1 usually) */
+#preview-container h1.academic-title {
+  font-size: 29px; /* 二号 22pt */
   font-weight: 700;
-  color: #1e40af;
-  margin: 1.5em 0 0.8em;
-  padding-bottom: 0.3em;
-  border-bottom: 2px solid #e5e7eb;
+  text-align: center;
+  margin: 1.5em 0 1em;
+  padding-bottom: 0;
 }
 
-#preview-container h2 {
-  font-size: 1.5rem;
+/* Subtitle */
+#preview-container .academic-subtitle,
+#preview-container .academic-subtitle-p {
+  font-family: KaiTi, 'Kaiti SC', STKaiti, serif;
+  font-size: 18.7px; /* 四号 14pt */
+  text-align: center;
+  margin: 0.5em 0 1.5em;
+}
+
+/* Heading 1 (Markdown H2) */
+#preview-container h2:not(.academic-subtitle):not(.academic-ref-title) {
+  font-size: 21.3px; /* 三号 16pt */
   font-weight: 700;
-  color: #1e40af;
-  margin: 1.3em 0 0.6em;
+  text-align: center;
+  margin: 1.5em 0 1em;
 }
 
+/* Heading 2 (Markdown H3) */
 #preview-container h3 {
-  font-size: 1.25rem;
+  font-size: 18.7px; /* 四号 14pt */
   font-weight: 700;
-  color: #374151;
-  margin: 1.2em 0 0.5em;
+  text-align: left;
+  margin: 1.2em 0 0.8em;
 }
 
+/* Heading 3 (Markdown H4) */
 #preview-container h4 {
-  font-size: 1.1rem;
+  font-size: 16px; /* 小四 12pt */
   font-weight: 700;
-  color: #4b5563;
-  margin: 1.1em 0 0.4em;
+  text-align: left;
+  margin: 1em 0 0.5em;
 }
 
-#preview-container p {
-  line-height: 1.8;
+/* Abstract and Keywords */
+#preview-container p.academic-abstract {
+  font-family: KaiTi, 'Kaiti SC', STKaiti, serif;
+  font-size: 16px; /* 小四 12pt */
+  line-height: 1.5;
+  text-indent: 2em;
   margin: 0 0 1em;
-  text-indent: 0;
+}
+
+/* Body Text */
+#preview-container p.academic-p,
+#preview-container p:not([class]) {
+  font-size: 16px; /* 小四 12pt */
+  line-height: 1.5;
+  text-indent: 2em;
   text-align: justify;
+  margin: 0 0 1em;
+}
+
+/* Reference Title */
+#preview-container h2.academic-ref-title {
+  font-size: 21.3px; /* 三号 16pt */
+  font-weight: 700;
+  text-align: center;
+  margin: 1.5em 0 1em;
+}
+
+/* Reference Items */
+#preview-container p.academic-ref-item,
+#preview-container ul.academic-ref-list li,
+#preview-container ol.academic-ref-list li {
+  font-family: SimSun, STSong, 'Songti SC', NSimSun, serif;
+  font-size: 14px; /* 五号 10.5pt */
+  line-height: 1.5;
+  text-indent: -2em;
+  padding-left: 2em;
+  margin: 0 0 0.5em;
 }
 
 #preview-container ul,
@@ -68,9 +116,14 @@
   margin: 0.5em 0 1em;
 }
 
+#preview-container ul.academic-ref-list,
+#preview-container ol.academic-ref-list {
+  padding-left: 0;
+  margin-left: 0;
+}
+
 #preview-container li {
-  text-indent: 0;
-  line-height: 1.8;
+  line-height: 1.5;
   margin-bottom: 0.3em;
 }
 

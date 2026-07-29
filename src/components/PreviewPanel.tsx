@@ -134,6 +134,53 @@ export default function PreviewPanel({ content, previewId, onScrollContainerRead
     // 2. Write to DOM
     if (previewRef.current) {
       previewRef.current.innerHTML = html
+
+      // Apply academic classes for CSS styling
+      const container = previewRef.current
+      let h1Count = 0
+      let isRef = false
+
+      Array.from(container.children).forEach((el, idx) => {
+        const tagName = el.tagName.toLowerCase()
+        const text = el.textContent?.trim() || ''
+
+        if (tagName === 'h1') {
+          if (h1Count === 0) {
+            el.classList.add('academic-title')
+            h1Count++
+          }
+        } else if (tagName === 'h2') {
+          if (text.includes('参考文献')) {
+            el.classList.add('academic-ref-title')
+            isRef = true
+          } else if (idx === 1 && h1Count === 1) {
+            el.classList.add('academic-subtitle')
+          }
+        } else if (tagName === 'p') {
+          if (isRef) {
+            el.classList.add('academic-ref-item')
+          } else if (
+            text.startsWith('摘要') || 
+            text.startsWith('关键词') || 
+            text.includes('**摘要**') || 
+            text.includes('**关键词**')
+          ) {
+            el.classList.add('academic-abstract')
+          } else if (
+            text.startsWith('副标题：') || 
+            text.startsWith('——') || 
+            text.startsWith('副标题:')
+          ) {
+            el.classList.add('academic-subtitle-p')
+          } else {
+            el.classList.add('academic-p')
+          }
+        } else if (tagName === 'ul' || tagName === 'ol') {
+          if (isRef) {
+            el.classList.add('academic-ref-list')
+          }
+        }
+      })
     }
 
     // 3. Render KaTeX + Mermaid (needs DOM to be present)

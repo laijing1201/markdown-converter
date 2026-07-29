@@ -133,88 +133,65 @@ export async function exportToDocx(innerHtml: string, filename: string) {
       default: {
         document: {
           run: {
-            size: 24, // 12pt
+            size: 24, // 小四 12pt
             font: 'SimSun',
-            color: '333333',
+            color: '000000',
           },
           paragraph: {
-            spacing: { line: 360, before: 120, after: 120 },
+            spacing: { line: 360, before: 120, after: 120 }, // 1.5倍行距
+            indent: { firstLine: 480 }, // 首行缩进2字符 (2 * 12pt * 20 = 480)
           },
         },
       },
       paragraphStyles: [
         {
-          id: 'Heading1',
-          name: 'Heading 1',
-          basedOn: 'Normal',
-          next: 'Normal',
-          quickFormat: true,
-          run: {
-            size: 36, // 18pt
-            bold: true,
-            font: 'Microsoft YaHei',
-            color: '1E40AF', // Deep blue
-          },
-          paragraph: {
-            spacing: { before: 480, after: 240 }
-          },
+          id: 'Title', name: 'Title', basedOn: 'Normal', next: 'Normal', quickFormat: true,
+          run: { size: 44, bold: true, font: 'SimHei', color: '000000' }, // 二号 22pt
+          paragraph: { spacing: { before: 240, after: 240 }, alignment: AlignmentType.CENTER, indent: { firstLine: 0 } },
         },
         {
-          id: 'Heading2',
-          name: 'Heading 2',
-          basedOn: 'Normal',
-          next: 'Normal',
-          quickFormat: true,
-          run: {
-            size: 32, // 16pt
-            bold: true,
-            font: 'Microsoft YaHei',
-            color: '1E40AF',
-          },
-          paragraph: {
-            spacing: { before: 400, after: 200 },
-          },
+          id: 'Subtitle', name: 'Subtitle', basedOn: 'Normal', next: 'Normal', quickFormat: true,
+          run: { size: 28, font: 'KaiTi', color: '000000' }, // 四号 14pt
+          paragraph: { spacing: { before: 120, after: 240 }, alignment: AlignmentType.CENTER, indent: { firstLine: 0 } },
         },
         {
-          id: 'Heading3',
-          name: 'Heading 3',
-          basedOn: 'Normal',
-          next: 'Normal',
-          quickFormat: true,
-          run: {
-            size: 28, // 14pt
-            bold: true,
-            font: 'Microsoft YaHei',
-            color: '374151',
-          },
-          paragraph: {
-            spacing: { before: 300, after: 150 },
-          },
+          id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true,
+          run: { size: 32, bold: true, font: 'SimHei', color: '000000' }, // 三号 16pt
+          paragraph: { spacing: { before: 240, after: 240 }, alignment: AlignmentType.CENTER, indent: { firstLine: 0 } },
         },
         {
-          id: 'Heading4',
-          name: 'Heading 4',
-          basedOn: 'Normal',
-          next: 'Normal',
-          quickFormat: true,
-          run: {
-            size: 24, // 12pt
-            bold: true,
-            font: 'Microsoft YaHei',
-            color: '4B5563',
-          },
-          paragraph: {
-            spacing: { before: 240, after: 120 },
-          },
+          id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true,
+          run: { size: 28, bold: true, font: 'SimHei', color: '000000' }, // 四号 14pt
+          paragraph: { spacing: { before: 200, after: 120 }, indent: { firstLine: 0 } },
         },
         {
-          id: 'ListParagraph',
-          name: 'List Paragraph',
-          basedOn: 'Normal',
-          quickFormat: true,
-          paragraph: {
-            spacing: { before: 100, after: 100 },
-          },
+          id: 'Heading3', name: 'Heading 3', basedOn: 'Normal', next: 'Normal', quickFormat: true,
+          run: { size: 24, bold: true, font: 'SimHei', color: '000000' }, // 小四 12pt
+          paragraph: { spacing: { before: 160, after: 120 }, indent: { firstLine: 0 } },
+        },
+        {
+          id: 'Heading4', name: 'Heading 4', basedOn: 'Normal', next: 'Normal', quickFormat: true,
+          run: { size: 24, bold: true, font: 'SimHei', color: '000000' }, // 小四 12pt
+          paragraph: { spacing: { before: 120, after: 120 }, indent: { firstLine: 0 } },
+        },
+        {
+          id: 'AbstractContent', name: 'Abstract Content', basedOn: 'Normal', next: 'Normal', quickFormat: true,
+          run: { size: 24, font: 'KaiTi', color: '000000' }, // 楷体小四
+          paragraph: { spacing: { line: 360, before: 120, after: 120 }, indent: { firstLine: 480 } }, // 1.5行距
+        },
+        {
+          id: 'ReferenceTitle', name: 'Reference Title', basedOn: 'Normal', next: 'ReferenceItem', quickFormat: true,
+          run: { size: 32, bold: true, font: 'SimHei', color: '000000' }, // 三号 16pt
+          paragraph: { spacing: { before: 240, after: 240 }, alignment: AlignmentType.CENTER, indent: { firstLine: 0 } },
+        },
+        {
+          id: 'ReferenceItem', name: 'Reference Item', basedOn: 'Normal', next: 'ReferenceItem', quickFormat: true,
+          run: { size: 21, font: 'SimSun', color: '000000' }, // 宋体五号 10.5pt
+          paragraph: { spacing: { line: 360, before: 60, after: 60 }, indent: { firstLine: 0, hanging: 420, left: 420 } },
+        },
+        {
+          id: 'ListParagraph', name: 'List Paragraph', basedOn: 'Normal', quickFormat: true,
+          paragraph: { spacing: { before: 100, after: 100 }, indent: { firstLine: 0 } },
         }
       ]
     },
@@ -283,12 +260,18 @@ function findPrecedingHeading(el: Element): Element | null {
 // Parse block-level elements (paragraphs, tables, lists, etc.)
 function parseBlockNodes(container: HTMLElement): any[] {
   let blocks: any[] = []
+  let h1Count = 0
+  let isReferenceSection = false
   
   Array.from(container.childNodes).forEach(node => {
     if (node.nodeType === Node.TEXT_NODE) {
       const text = node.textContent?.trim()
       if (text) {
-        blocks.push(new Paragraph({ children: [new TextRun(text)] }))
+        if (isReferenceSection) {
+          blocks.push(new Paragraph({ children: [new TextRun(text)], style: 'ReferenceItem' }))
+        } else {
+          blocks.push(new Paragraph({ children: [new TextRun(text)] }))
+        }
       }
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const el = node as HTMLElement
@@ -296,35 +279,57 @@ function parseBlockNodes(container: HTMLElement): any[] {
 
       if (/^h[1-6]$/.test(tagName)) {
         const level = parseInt(tagName[1])
-        blocks.push(new Paragraph({
-          children: parseInlineNodes(el),
-          heading: [
-            HeadingLevel.HEADING_1,
-            HeadingLevel.HEADING_2,
-            HeadingLevel.HEADING_3,
-            HeadingLevel.HEADING_4,
-            HeadingLevel.HEADING_5,
-            HeadingLevel.HEADING_6
-          ][level - 1],
-          spacing: { before: 240, after: 120 }
-        }))
+        const textContent = el.textContent?.trim() || ''
+
+        if (level === 1 && h1Count === 0) {
+          h1Count++
+          blocks.push(new Paragraph({ children: parseInlineNodes(el), style: 'Title' }))
+        } else if (level === 2 && textContent.includes('参考文献')) {
+          isReferenceSection = true
+          blocks.push(new Paragraph({ children: parseInlineNodes(el), style: 'ReferenceTitle' }))
+        } else if (level === 2 && blocks.length === 1 && h1Count === 1) {
+          // Immediately after Title
+          blocks.push(new Paragraph({ children: parseInlineNodes(el), style: 'Subtitle' }))
+        } else {
+          // Normal mappings: Markdown H2 -> Heading1, H3 -> Heading2
+          const styleName = level === 2 ? 'Heading1' : level === 3 ? 'Heading2' : level === 4 ? 'Heading3' : 'Heading4'
+          blocks.push(new Paragraph({ children: parseInlineNodes(el), style: styleName }))
+        }
       } else if (tagName === 'p') {
-        blocks.push(new Paragraph({
-          children: parseInlineNodes(el),
-          spacing: { after: 120 }
-        }))
+        const textContent = el.textContent?.trim() || ''
+        if (isReferenceSection) {
+          blocks.push(new Paragraph({ children: parseInlineNodes(el), style: 'ReferenceItem' }))
+        } else if (textContent.startsWith('摘要') || textContent.startsWith('关键词') || textContent.includes('**摘要**') || textContent.includes('**关键词**')) {
+          blocks.push(new Paragraph({ children: parseInlineNodes(el), style: 'AbstractContent' }))
+        } else if (textContent.startsWith('副标题：') || textContent.startsWith('——') || textContent.startsWith('副标题:')) {
+          blocks.push(new Paragraph({ children: parseInlineNodes(el), style: 'Subtitle' }))
+        } else {
+          blocks.push(new Paragraph({ children: parseInlineNodes(el) }))
+        }
       } else if (tagName === 'ul' || tagName === 'ol') {
-        const listBlocks = parseListNodes(el, 0)
-        blocks.push(...listBlocks)
+        if (isReferenceSection) {
+          Array.from(el.children).forEach((li, idx) => {
+            if (li.tagName.toLowerCase() === 'li') {
+              const marker = tagName === 'ol' ? `[${idx + 1}] ` : '• '
+              const runs = [new TextRun(marker), ...parseInlineNodes(li as HTMLElement)]
+              blocks.push(new Paragraph({ children: runs, style: 'ReferenceItem' }))
+            }
+          })
+        } else {
+          const listBlocks = parseListNodes(el, 0)
+          blocks.push(...listBlocks)
+        }
       } else if (tagName === 'blockquote') {
-        blocks.push(new Paragraph({
-          children: parseInlineNodes(el, { color: '6B7280', italics: true }),
-          spacing: { before: 200, after: 200 },
-          indent: { left: 480 }, // Indent
-          border: {
-            left: { style: BorderStyle.SINGLE, size: 24, color: 'D1D5DB', space: 10 }
-          }
-        }))
+        if (blocks.length > 0 && h1Count === 1 && blocks.length < 3) {
+          blocks.push(new Paragraph({ children: parseInlineNodes(el), style: 'Subtitle' }))
+        } else {
+          blocks.push(new Paragraph({
+            children: parseInlineNodes(el, { color: '6B7280', italics: true }),
+            spacing: { before: 200, after: 200 },
+            indent: { left: 480 },
+            border: { left: { style: BorderStyle.SINGLE, size: 24, color: 'D1D5DB', space: 10 } }
+          }))
+        }
       } else if (tagName === 'pre') {
         const codeText = el.textContent || ''
         blocks.push(new Paragraph({
@@ -340,34 +345,21 @@ function parseBlockNodes(container: HTMLElement): any[] {
         }))
       } else if (tagName === 'table') {
         blocks.push(parseTableNode(el))
-        blocks.push(new Paragraph({ text: "" })) // spacing after table
+        blocks.push(new Paragraph({ text: "" }))
       } else if (tagName === 'hr') {
         blocks.push(new Paragraph({
           border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "e5e7eb" } }
         }))
       } else if (tagName === 'div' && el.classList.contains('math-block')) {
-        // usually already replaced by img if successfully captured
         const img = el.querySelector('img')
         if (img) {
-          blocks.push(new Paragraph({
-            children: parseInlineNodes(el),
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 120, after: 120 }
-          }))
+          blocks.push(new Paragraph({ children: parseInlineNodes(el), alignment: AlignmentType.CENTER, spacing: { before: 120, after: 120 } }))
         } else {
-          blocks.push(new Paragraph({
-            children: parseInlineNodes(el),
-            alignment: AlignmentType.CENTER
-          }))
+          blocks.push(new Paragraph({ children: parseInlineNodes(el), alignment: AlignmentType.CENTER }))
         }
       } else if (tagName === 'div' && el.classList.contains('mermaid-rendered')) {
-        blocks.push(new Paragraph({
-          children: parseInlineNodes(el),
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 120, after: 120 }
-        }))
+        blocks.push(new Paragraph({ children: parseInlineNodes(el), alignment: AlignmentType.CENTER, spacing: { before: 120, after: 120 } }))
       } else {
-        // Fallback: parse children as block nodes
         blocks.push(...parseBlockNodes(el))
       }
     }
