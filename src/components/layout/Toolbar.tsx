@@ -37,7 +37,7 @@ export default function Toolbar({
     if (!previewEl) return
 
     try {
-      const { exportToDocx } = await import('../utils/export')
+      const { exportToDocx } = await import('../../core/exporter')
       const name = `${EXPORT_NAME_PREFIX}-${timestampSuffix()}`
       await exportToDocx(previewEl.innerHTML, name)
     } catch (err) {
@@ -51,7 +51,7 @@ export default function Toolbar({
     if (!previewEl) return
 
     try {
-      const { exportToPdf } = await import('../utils/export')
+      const { exportToPdf } = await import('../../core/exporter')
       const name = `${EXPORT_NAME_PREFIX}-${timestampSuffix()}`
       await exportToPdf(previewEl, name)
     } catch (err) {

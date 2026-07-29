@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { deepAnalyzeEncoding, type FixCandidate } from '../utils/markdownProcessor'
+import { deepAnalyzeEncoding, type FixCandidate } from '../../core/markdown'
 
 interface DeepFixModalProps {
   content: string

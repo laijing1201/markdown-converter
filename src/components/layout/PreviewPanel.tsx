@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import katex from 'katex'
 import mermaid from 'mermaid'
-import { markdownToSafeHtml } from '../utils/markdownProcessor'
+import { markdownToSafeHtml } from '../../core/markdown'
 
 interface PreviewPanelProps {
   content: string

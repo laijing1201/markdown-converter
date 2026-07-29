@@ -1,11 +1,11 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import EditorPanel from './components/EditorPanel'
-import PreviewPanel from './components/PreviewPanel'
-import Toolbar from './components/Toolbar'
-import DeepFixModal from './components/DeepFixModal'
-import SmartFormatModal from './components/SmartFormatModal'
-import { validateMarkdown, detectEncodingIssues } from './utils/validation'
-import { smartFormatText } from './utils/smartFormat'
+import EditorPanel from './components/layout/EditorPanel'
+import PreviewPanel from './components/layout/PreviewPanel'
+import Toolbar from './components/layout/Toolbar'
+import DeepFixModal from './components/modals/DeepFixModal'
+import SmartFormatModal from './components/modals/SmartFormatModal'
+import { validateMarkdown, detectEncodingIssues } from './core/validator'
+import { smartFormatText } from './core/formatter'
 
 const DEFAULT_CONTENT = `# MarkDoc
 
