@@ -236,25 +236,42 @@
 /* ── Print Styles ───────────────────────────────────────────────────────── */
 
 @media print {
-  /* Hide the editor, toolbar, and anything else outside the preview */
-  body * {
-    visibility: hidden;
+  /* Hide the editor, toolbar, and headers completely */
+  .h-screen > :not(.flex-1),
+  .flex-1.flex.flex-col.md\:flex-row > :first-child,
+  .flex-1.flex.flex-col.md\:flex-row > :last-child > :first-child {
+    display: none !important;
   }
   
-  /* Make the preview container and its children visible */
-  #preview-container, #preview-container * {
-    visibility: visible;
+  /* Remove height/overflow constraints on all wrappers to allow natural page breaks */
+  html, body, #root, .h-screen, .flex-1, .flex, .flex-col, .md\:flex-row, .w-full, .md\:w-1\/2, .h-full, .min-h-0, .overflow-hidden, .overflow-y-auto, .relative {
+    display: block !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    width: 100% !important;
   }
   
-  /* Position the preview container at the top left of the page */
+  /* Make the preview container flow naturally */
   #preview-container {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
     box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  /* Prevent awkward page breaks */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  p, pre, blockquote, img, table, ul, ol, li, .mermaid-rendered, .math-block {
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
   
   /* Academic paper print defaults */
