@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>流式生成场景</title></head>
+<body>
+<nav aria-label="Chat history"><a aria-current="page" href="/c/stream">流式生成场景</a></nav>
+<main>
+  <div id="conversation-list">
+
+  <div data-testid="conversation-turn-1">
+    <div data-message-author-role="user" data-message-id="cg-u-s1">
+      <div class="whitespace-pre-wrap">请解释一下过拟合</div>
+    </div>
+  </div>
+
+  <!-- 正在流式生成中的回答：内容只有一半 + 页面出现停止按钮 -->
+  <div data-testid="conversation-turn-2">
+    <div data-message-author-role="assistant" data-message-id="cg-a-s2">
+      <div class="markdown prose"><p>过拟合是指模型在训练数据上表现很好，</p></div>
+    </div>
+  </div>
+
+  </div>
+  <div data-testid="stop-button" role="button" aria-label="Stop streaming"><span>■</span></div>
+</main>
+</body></html>

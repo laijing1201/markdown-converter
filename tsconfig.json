@@ -17,6 +17,6 @@
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src"],
+  "include": ["src", "extension", "electron"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

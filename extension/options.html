@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>MarkDoc 扩展设置</title>
+  <link rel="stylesheet" href="./popup.css" />
+  <style>
+    body { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .sub { font-size: 12.5px; color: light-dark(#6b7280, #9ca3af); margin-bottom: 18px; }
+    .card { margin-bottom: 14px; }
+    .card h2 { font-size: 14px; margin: 0 0 10px; }
+    .adv { font-size: 12px; color: light-dark(#6b7280, #9ca3af); }
+    .adv a { color: #2563eb; }
+  </style>
+</head>
+<body>
+  <h1>📄 MarkDoc 扩展设置</h1>
+  <p class="sub">这里只放导出默认值；高级排版（字体 / 页边距 / 标题编号 / 页眉页脚 / 自定义模板）请在 MarkDoc 网页版中调整。</p>
+
+  <section class="card">
+    <h2>导出默认值</h2>
+    <div class="field-row">
+      <span class="lbl">默认格式</span>
+      <label class="check"><input type="radio" name="opt-target" value="docx" /> Word（公式可编辑）</label>
+      <label class="check"><input type="radio" name="opt-target" value="pdf" /> PDF（文字可搜索）</label>
+    </div>
+    <div class="field">
+      <label>默认模板</label>
+      <select id="opt-template"></select>
+    </div>
+    <div class="field">
+      <label>整段对话风格</label>
+      <select id="opt-style">
+        <option value="dialogue">对话模式（保留用户/AI 标题）</option>
+        <option value="article">内容整理模式（仅 AI 内容）</option>
+      </select>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>内容包含</h2>
+    <div class="field-row">
+      <label class="check"><input type="checkbox" id="opt-user-messages" /> 包含用户提问</label>
+      <label class="check"><input type="checkbox" id="opt-sources" /> 包含来源链接</label>
+    </div>
+    <div class="field-row">
+      <label class="check"><input type="checkbox" id="opt-toc" /> 生成目录</label>
+      <label class="check"><input type="checkbox" id="opt-pagenum" /> 生成页码</label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>MarkDoc 网页版</h2>
+    <div class="field">
+      <label>网页版地址</label>
+      <input type="url" id="opt-markdoc-url" style="flex:1;padding:5px 8px;font-size:12.5px;border-radius:7px;border:1px solid light-dark(#d1d5db,#4b5563);background:light-dark(#fff,#374151);color:inherit" />
+    </div>
+    <p class="adv">「在 MarkDoc 中编辑」会打开此地址并自动填入内容；内容仅在本地临时传递，30 分钟后自动删除。若自部署 MarkDoc，改为你的地址即可。</p>
+  </section>
+
+  <section class="card">
+    <h2>快捷键</h2>
+    <p class="adv">默认快捷键 <strong>Alt+Shift+W</strong>（导出最近一条 AI 回答）。如与其他软件冲突，可在浏览器 <a href="#" id="link-shortcuts">扩展快捷键设置页</a> 中修改。</p>
+  </section>
+
+  <p class="adv">MarkDoc 扩展 v<span id="ver"></span> · 所有导出均在本地完成，不上传任何内容。<a href="#" id="link-privacy">隐私说明</a></p>
+
+  <script type="module" src="./options-main.ts"></script>
+</body>
+</html>

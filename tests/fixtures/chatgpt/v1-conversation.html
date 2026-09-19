@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>深度学习面试准备</title></head>
+<body>
+<nav aria-label="Chat history"><a aria-current="page" href="/c/abc123">深度学习面试准备</a></nav>
+<main>
+  <h1>深度学习面试准备</h1>
+  <div id="conversation-list">
+
+  <div data-testid="conversation-turn-14">
+    <div data-message-author-role="user" data-message-id="cg-u-14">
+      <div class="whitespace-pre-wrap">反向传播和梯度消失有什么关系？</div>
+    </div>
+  </div>
+
+  <div data-testid="conversation-turn-15">
+    <div data-message-author-role="assistant" data-message-id="cg-a-15">
+      <div class="markdown prose"><p>反向传播中梯度逐层相乘，<strong>深层网络</strong>中容易导致梯度消失。</p></div>
+    </div>
+    <div data-testid="message-action-bar"><button data-testid="copy-button">复制</button><button data-testid="thumb-up">👍</button></div>
+  </div>
+
+  <div data-testid="conversation-turn-16">
+    <div data-message-author-role="user" data-message-id="cg-u-16">
+      <div class="whitespace-pre-wrap">怎么缓解？</div>
+    </div>
+  </div>
+
+  <div data-testid="conversation-turn-17">
+    <div data-message-author-role="assistant" data-message-id="cg-a-17">
+      <div class="markdown prose"><p>常用方法：</p><ol><li>ReLU 激活函数</li><li>残差连接</li><li>批归一化</li></ol><p>核心公式：<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>h</mi></mrow><annotation encoding="application/x-tex">h^{(l+1)} = h^{(l)} + F(h^{(l)})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true">h</span></span></p></div>
+    </div>
+    <div data-testid="message-action-bar"><button data-testid="copy-button">复制</button><button data-testid="thumb-up">👍</button></div>
+  </div>
+
+  <div data-testid="conversation-turn-18">
+    <div data-message-author-role="user" data-message-id="cg-u-18">
+      <div class="whitespace-pre-wrap">BatchNorm 为什么有效？</div>
+    </div>
+  </div>
+
+  <div data-testid="conversation-turn-19">
+    <div data-message-author-role="assistant" data-message-id="cg-a-19">
+      <div class="markdown prose"><p>它把每层输入拉回稳定分布，<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x̂</mi></mrow><annotation encoding="application/x-tex">\hat{x} = \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true">x̂</span></span></span> 使梯度更稳定。</p></div>
+    </div>
+    <div data-testid="message-action-bar"><button data-testid="copy-button">复制</button><button data-testid="thumb-up">👍</button></div>
+  </div>
+
+  </div>
+  <div data-testid="composer-action-buttons"><button>语音</button></div>
+</main>
+</body></html>

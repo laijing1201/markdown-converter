@@ -78,24 +78,30 @@ export function validateMarkdown(markdown: string): ValidationWarning[] {
   }
 
   // ── Unclosed math blocks ($$) ───────────────────────────────────────────
-  let mathBlockCount = 0
-  for (let i = 0; i < lines.length; i++) {
-    if (/^\$\$/.test(lines[i].trim())) {
-      mathBlockCount++
-    }
-  }
-  if (mathBlockCount % 2 !== 0) {
+  // Count $$ tokens (not lines): a self-closed single-line "$$x$$" has two.
+  {
+    let mathTokenCount = 0
+    let inFence = false
     let lastMathLine = 0
     for (let i = 0; i < lines.length; i++) {
-      if (/^\$\$/.test(lines[i].trim())) {
-        lastMathLine = i
+      if (lines[i].trimStart().startsWith('```')) {
+        inFence = !inFence
+        continue
+      }
+      if (inFence) continue
+      const tokens = (lines[i].match(/\$\$/g) || []).length
+      if (tokens > 0) {
+        mathTokenCount += tokens
+        lastMathLine = i + 1
       }
     }
-    warnings.push({
-      line: lastMathLine + 1,
-      message: '数学公式块未闭合：检测到奇数个 $$，缺少闭合标记',
-      type: 'error',
-    })
+    if (mathTokenCount % 2 !== 0) {
+      warnings.push({
+        line: lastMathLine,
+        message: '数学公式块未闭合：检测到奇数个 $$，缺少闭合标记',
+        type: 'error',
+      })
+    }
   }
 
   // ── Empty headers ───────────────────────────────────────────────────────

@@ -1,31 +1,5 @@
-declare module 'html2pdf.js' {
-  interface Html2PdfOptions {
-    margin?: number | [number, number, number, number];
-    filename?: string;
-    image?: { type?: string; quality?: number };
-    html2canvas?: {
-      scale?: number;
-      useCORS?: boolean;
-      [key: string]: unknown;
-    };
-    jsPDF?: {
-      unit?: string;
-      format?: string;
-      orientation?: 'portrait' | 'landscape';
-      [key: string]: unknown;
-    };
-  }
-
-  interface Html2PdfInstance {
-    set(options: Html2PdfOptions): Html2PdfInstance;
-    from(element: HTMLElement | string): Html2PdfInstance;
-    save(filename?: string): Promise<void>;
-    output(type: string): Promise<unknown>;
-  }
-
-  function html2pdf(): Html2PdfInstance;
-  namespace html2pdf {
-    function set(options: Html2PdfOptions): Html2PdfInstance;
-  }
-  export default html2pdf;
-}
+/**
+ * 项目自定义类型声明。
+ * （P5A 已移除遗留依赖 subset-font / html2pdf.js 的声明——两者均已不再使用；
+ *  html2canvas 仍被 exporter.ts 用于 Mermaid/公式兜底截图，类型自带。）
+ */

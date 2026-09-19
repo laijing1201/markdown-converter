@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>MarkDoc 已安装</title>
+  <link rel="stylesheet" href="./popup.css" />
+  <style>
+    body { max-width: 640px; margin: 0 auto; padding: 40px 16px; }
+    h1 { font-size: 22px; margin: 0 0 6px; }
+    .sub { font-size: 13px; color: light-dark(#6b7280, #9ca3af); margin-bottom: 22px; }
+    .steps { line-height: 2; font-size: 14px; }
+    .steps b { color: #2563eb; }
+    .btn { margin-right: 10px; }
+    .tip { font-size: 12px; color: light-dark(#6b7280, #9ca3af); margin-top: 24px; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <h1>📄 MarkDoc 已安装</h1>
+  <p class="sub">把 ChatGPT、DeepSeek 等 AI 回答一键导出为排版良好的 Word / PDF。所有处理都在本地完成。</p>
+
+  <section class="card">
+    <h2>✅ 当前支持</h2>
+    <div class="steps">
+      ChatGPT（chatgpt.com）<br />
+      DeepSeek（chat.deepseek.com）<br />
+      <span style="color:light-dark(#9ca3af,#6b7280)">实验性：Claude · Gemini · Kimi</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>🚀 使用方法</h2>
+    <div class="steps">
+      1. 打开任意 AI 对话页面<br />
+      2. 鼠标移到 AI 回答上，点击旁边的 <b>📄 MarkDoc 按钮</b>（或右下角悬浮球）<br />
+      3. 选择 <b>导出 Word</b> 或 <b>导出 PDF</b>，几秒后自动下载
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>开始使用</h2>
+    <button id="btn-open-chatgpt" class="btn primary">打开 ChatGPT</button>
+    <button id="btn-open-deepseek" class="btn primary">打开 DeepSeek</button>
+  </section>
+
+  <p class="tip">
+    💡 建议把 MarkDoc 图标固定到工具栏（拼图图标 → 📌）。<br />
+    ⌨️ 快捷键 <strong>Alt+Shift+W</strong>：导出最近一条 AI 回答（可在扩展设置中了解如何修改）。<br />
+    🔒 MarkDoc 不上传任何聊天内容，不读取浏览历史与 Cookie。
+  </p>
+
+  <script type="module" src="./onboarding-main.ts"></script>
+</body>
+</html>

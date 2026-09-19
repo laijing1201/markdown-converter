@@ -1,0 +1,79 @@
+{
+  "manifest_version": 3,
+  "name": "MarkDoc — AI 回答导出 Word / PDF",
+  "version": "0.1.0",
+  "description": "在 ChatGPT / DeepSeek 等 AI 页面，一键把回答或整段对话导出为排版良好的 Word（公式可编辑）与 PDF（文字可搜索）。内容全程本地处理。",
+  "minimum_chrome_version": "110",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://chat.deepseek.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "https://kimi.com/*",
+    "https://www.kimi.com/*",
+    "https://laijing1201.github.io/markdown-converter/*",
+    "http://localhost:5173/*",
+    "http://127.0.0.1:5173/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://chat.deepseek.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://kimi.com/*",
+        "https://www.kimi.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://laijing1201.github.io/markdown-converter/*",
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*"
+      ],
+      "js": ["bridge.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "commands": {
+    "export-last-answer": {
+      "suggested_key": {
+        "default": "Alt+Shift+W"
+      },
+      "description": "快速导出最近一条 AI 回答（默认格式可在扩展弹窗设置）"
+    }
+  }
+}

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MarkDoc</title>
+  <link rel="stylesheet" href="./popup.css" />
+</head>
+<body>
+  <div id="popup">
+    <header class="head">
+      <div class="brand">📄 MarkDoc</div>
+      <div class="privacy">🔒 默认本地处理</div>
+    </header>
+
+    <!-- 平台状态：正常 -->
+    <section id="state-card" class="card">
+      <div id="platform-row" class="row">
+        <span id="platform-name" class="platform">检测中…</span>
+        <span id="platform-badge" class="badge"></span>
+      </div>
+      <div id="conversation-title" class="title muted"></div>
+      <div id="conversation-stats" class="stats muted"></div>
+      <div id="generating-tip" class="gentip hidden">⏳ 当前回答仍在生成</div>
+    </section>
+
+    <!-- 平台状态：疑似 DOM 改版 / 识别异常（P4C 第八节） -->
+    <section id="degraded-card" class="card degraded hidden">
+      <div class="row">
+        <span id="degraded-platform" class="platform">⚠ 页面识别异常</span>
+      </div>
+      <p class="degraded-msg" id="degraded-msg">
+        MarkDoc 无法完整识别当前页面，网站结构可能已经更新。可以继续尝试导出，或复制诊断信息反馈（不含聊天内容）。
+      </p>
+      <div class="grid">
+        <button id="btn-copy-diagnostics" class="btn">📋 复制诊断信息</button>
+        <button id="btn-try-anyway" class="btn small">仍要尝试导出</button>
+      </div>
+    </section>
+
+    <!-- 不支持状态 -->
+    <section id="unsupported-card" class="card hidden">
+      <p class="muted" id="unsupported-msg">当前网站暂不支持直接导出。</p>
+      <p class="muted tiny hidden" id="unsupported-refresh-hint">若当前就是 AI 对话页，请刷新页面后重试。</p>
+      <div class="platform-list muted">
+        <div>✅ ChatGPT · ✅ DeepSeek</div>
+        <div>🧪 Claude · Gemini · Kimi（实验性）</div>
+      </div>
+      <button id="btn-open-markdoc" class="btn primary wide">打开 MarkDoc 网页版</button>
+    </section>
+
+    <!-- 主操作 -->
+    <section id="main-card" class="card hidden">
+      <div class="grid">
+        <button id="btn-export-last" class="btn">⚡ 最近回答</button>
+        <button id="btn-selection" class="btn">☑️ 选择消息</button>
+      </div>
+      <div class="conv-style">
+        <span class="lbl">整段对话：</span>
+        <button id="btn-conv-dialogue" class="btn small">💬 对话模式</button>
+        <button id="btn-conv-article" class="btn small">📄 内容整理</button>
+      </div>
+      <div class="grid">
+        <button id="btn-export-word" class="btn primary">📝 导出 Word</button>
+        <button id="btn-export-pdf" class="btn primary">📕 导出 PDF</button>
+      </div>
+      <p class="hint muted">「导出 Word / PDF」作用于「整段对话」；最近回答与多选的格式在其菜单中选择。</p>
+    </section>
+
+    <!-- 快速设置 -->
+    <section id="settings-card" class="card">
+      <div class="field">
+        <label>模板</label>
+        <select id="template-select"></select>
+      </div>
+      <div class="field-row">
+        <label class="check"><input type="checkbox" id="opt-user-messages" /> 包含用户消息</label>
+        <label class="check"><input type="checkbox" id="opt-sources" /> 包含来源</label>
+      </div>
+      <div class="field-row">
+        <label class="check"><input type="checkbox" id="opt-toc" /> 目录</label>
+        <label class="check"><input type="checkbox" id="opt-pagenum" /> 页码</label>
+      </div>
+      <div class="field-row">
+        <span class="lbl">默认格式</span>
+        <label class="check"><input type="radio" name="default-target" value="docx" /> Word</label>
+        <label class="check"><input type="radio" name="default-target" value="pdf" /> PDF</label>
+      </div>
+      <p class="hint muted">高级排版（字体/页边距/标题编号/页眉页脚）请在 <a href="#" id="link-options">扩展设置</a> 或 MarkDoc 网页版中调整。</p>
+    </section>
+
+    <footer class="foot">
+      <span>Alt+Shift+W 快速导出 · <span id="ext-version">v</span></span>
+      <a href="#" id="link-settings-url" title="设置 MarkDoc 网页版地址">设置</a>
+    </footer>
+  </div>
+  <script type="module" src="./popup-main.ts"></script>
+</body>
+</html>

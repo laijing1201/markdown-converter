@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MarkDoc 导出引擎</title>
+</head>
+<body>
+  <div id="app">
+    <header class="bar">
+      <div class="brand">📄 MarkDoc 导出引擎 <span id="mode-label" class="mode"></span></div>
+      <div class="privacy">🔒 全程本地处理，内容不上传</div>
+    </header>
+
+    <main class="body">
+      <!-- 覆盖层：preflight / 进度 / 完成 / 错误（舞台必须常驻可见：
+           html2canvas 截图与 PDF 实测布局都要求源元素处于渲染状态） -->
+      <div id="overlay" class="overlay hidden">
+        <section id="preflight-view" class="hidden">
+          <h2>导出前质量检查</h2>
+          <div id="preflight-stats" class="stats"></div>
+          <ul id="preflight-issues" class="issues"></ul>
+          <div class="actions">
+            <button id="btn-preflight-continue" class="btn primary">继续导出</button>
+            <button id="btn-preflight-fix" class="btn">在 MarkDoc 中修复</button>
+          </div>
+        </section>
+
+        <section id="progress-view" class="hidden">
+          <h2 id="progress-label">正在生成…</h2>
+          <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+        </section>
+
+        <section id="done-view" class="hidden">
+          <h2 id="done-label">✅ 已导出</h2>
+          <p id="done-detail" class="muted"></p>
+          <div class="actions">
+            <button id="btn-close" class="btn primary">完成</button>
+          </div>
+        </section>
+
+        <section id="error-view" class="hidden">
+          <h2>⚠️ 导出失败</h2>
+          <p id="error-detail" class="muted"></p>
+          <div class="actions">
+            <button id="btn-error-close" class="btn primary">关闭</button>
+          </div>
+        </section>
+      </div>
+
+      <section id="stage-view">
+        <div class="job-meta" id="job-meta"></div>
+
+        <!-- 预览舞台：与网页版 preview-container 同构（.md-preview + 模板类 + 纸张类），
+             复用 core/renderPreviewDom + buildDocxBlob / buildPdf -->
+        <div class="paper-wrap" id="paper-wrap">
+          <div id="preview-container" class="md-preview tpl-general a4-page"></div>
+        </div>
+
+        <div class="actions">
+          <button id="btn-docx" class="btn primary">📝 导出 Word</button>
+          <button id="btn-pdf" class="btn primary">📕 导出 PDF</button>
+          <button id="btn-edit" class="btn">✏️ 在 MarkDoc 中编辑</button>
+        </div>
+      </section>
+    </main>
+  </div>
+  <link rel="stylesheet" href="./exporter.css" />
+  <script type="module" src="/exporter-main.ts"></script>
+</body>
+</html>

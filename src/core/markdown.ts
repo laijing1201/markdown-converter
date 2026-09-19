@@ -23,6 +23,12 @@ marked.use(
 
 // ─── Math placeholder engine ───────────────────────────────────────────────────
 
+import { blockMathRe, inlineMathRe, extractFormulas } from './mathSyntax'
+// 公式语法工具（正则/extractFormulas）已抽取到 core/mathSyntax（零依赖共享），
+// 这里保留 re-export 维持原有公共 API 兼容（preflight / 扩展 / 测试共用）。
+export { extractFormulas }
+export type { ExtractedFormula } from './mathSyntax'
+
 interface MathEntry {
   formula: string
   isBlock: boolean
@@ -45,16 +51,16 @@ export function extractMathPlaceholders(markdown: string): string {
   let result = markdown
 
   // 1) Block math $$...$$  (greedy, multiline)
-  result = result.replace(/\$\$([\s\S]*?)\$\$/g, (_match, formula: string) => {
+  result = result.replace(blockMathRe(), (_match, formula: string) => {
     const key = `%%MATH_BLOCK_${mathCounter}%%`
     mathStore[key] = { formula: formula.trim(), isBlock: true }
     mathCounter++
     return key
   })
 
-  // 2) Inline math $...$ (single line, not preceded/followed by another $)
+  // 2) Inline math $...$ (single line, not part of a block formula)
   result = result.replace(
-    /(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/g,
+    inlineMathRe(),
     (_match, formula: string) => {
       const key = `%%MATH_INLINE_${mathCounter}%%`
       mathStore[key] = { formula: formula.trim(), isBlock: false }
@@ -88,32 +94,129 @@ export function restoreMathInHtml(html: string): string {
   )
 }
 
+// ─── Block extensions: 分页符 / 图题表题 ──────────────────────────────────────
+
+/** 统计分页符数量（preflight/统计用） */
+export function countPagebreaks(markdown: string): number {
+  return (markdown.match(/^[ \t]*<!--\s*pagebreak\s*-->[ \t]*$/gim) || []).length
+}
+
+interface CaptionEntry {
+  kind: 'fig' | 'tbl'
+  text: string
+}
+
+let captionCounter = 0
+const captionStore: Record<string, CaptionEntry> = {}
+
+/**
+ * 块级扩展预处理（在 math 提取、marked 之前执行）：
+ *   1. `<!-- pagebreak -->` 独立成行 → %%PAGEBREAK%% 占位
+ *   2. `*图：说明*` / `*表：说明*` 独立成行 → %%CAPTION_N%% 占位
+ *      （用户手写的编号会被自动编号替换，见 PreviewPanel / exporter）
+ * 其余标准 Markdown 完全不受影响。
+ */
+export function extractBlockExtensions(markdown: string): string {
+  captionCounter = 0
+  for (const key of Object.keys(captionStore)) delete captionStore[key]
+
+  let result = markdown.replace(
+    /^[ \t]*<!--\s*pagebreak\s*-->[ \t]*$/gim,
+    () => '%%PAGEBREAK%%',
+  )
+
+  result = result.replace(
+    /^[ \t]*([*_])[ \t]*(图|表|Figure|Table|Fig\.?)[ \t]*\d*[ \t]*[:：][ \t]*(.*?)[ \t]*\1[ \t]*$/gim,
+    (_m, _mark: string, kindWord: string, text: string) => {
+      const kind = /^(图|Figure|Fig)/i.test(kindWord) ? 'fig' : 'tbl'
+      const key = `%%CAPTION_${captionCounter}%%`
+      captionStore[key] = { kind, text: text.trim() }
+      captionCounter++
+      return key
+    },
+  )
+
+  return result
+}
+
+function escapeHtmlText(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/** 把分页符/caption 占位还原为带语义 class 的 div；顺便补 task-list 类名 */
+export function restoreBlockExtensions(html: string): string {
+  let result = html.replace(
+    /<p>(?:\s*%%PAGEBREAK%%\s*)+<\/p>/g,
+    '<div class="pagebreak"></div>',
+  )
+  // 极端情况：占位和其他文本挤进同一个 <p>（连续两行分页符等），拆开段落
+  result = result.replace(/%%PAGEBREAK%%/g, '</p><div class="pagebreak"></div><p>')
+
+  result = result.replace(
+    /<p>\s*%%CAPTION_(\d+)%%\s*<\/p>/g,
+    (_m, id: string) => {
+      const entry = captionStore[`%%CAPTION_${id}%%`]
+      if (!entry) return _m
+      return `<div class="block-caption" data-kind="${entry.kind}">${escapeHtmlText(entry.text)}</div>`
+    },
+  )
+  result = result.replace(/%%CAPTION_(\d+)%%/g, (_m, id: string) => {
+    const entry = captionStore[`%%CAPTION_${id}%%`]
+    if (!entry) return _m
+    return `</p><div class="block-caption" data-kind="${entry.kind}">${escapeHtmlText(entry.text)}</div><p>`
+  })
+
+  // GFM task list：marked 不给 ul/li 加类名，这里补齐（供预览样式与导出识别）
+  result = result.replace(
+    /<li>(\s*<p>)?\s*<input([^>]*type="checkbox")/g,
+    '<li class="task-list-item">$1<input$2',
+  )
+  result = result.replace(
+    /<ul>\s*<li class="task-list-item"/g,
+    '<ul class="task-list"><li class="task-list-item"',
+  )
+
+  return result
+}
+
 // ─── Full pipeline ─────────────────────────────────────────────────────────────
 
 /**
  * Convert a raw markdown string to a safe, render-ready HTML string.
  *
  * Pipeline:
- *   raw MD  →  extract math placeholders  →  marked (with highlight.js)
- *   →  restore math in HTML  →  DOMPurify  →  output
+ *   raw MD  →  block extensions (pagebreak/caption)  →  extract math placeholders
+ *   →  marked (with highlight.js)  →  restore math  →  restore block extensions
+ *   →  DOMPurify  →  output
  */
 export function markdownToSafeHtml(markdown: string): string {
-  // Step 1 – protect LaTeX
-  const withPlaceholders = extractMathPlaceholders(markdown)
+  // Step 1 – pagebreak / caption 语法预处理
+  const withExtensions = extractBlockExtensions(markdown)
 
-  // Step 2 – marked parse (handles code blocks, tables, etc.)
+  // Step 2 – protect LaTeX
+  const withPlaceholders = extractMathPlaceholders(withExtensions)
+
+  // Step 3 – marked parse (handles code blocks, tables, etc.)
   const rawHtml = marked.parse(withPlaceholders) as string
 
-  // Step 3 – put math markers back as HTML elements
+  // Step 4 – put math markers back as HTML elements
   const htmlWithMath = restoreMathInHtml(rawHtml)
 
-  // Step 4 – sanitise (allow data-* for our math markers)
-  const clean = DOMPurify.sanitize(htmlWithMath, {
+  // Step 5 – pagebreak / caption 占位还原 + task-list 类名
+  const htmlRestored = restoreBlockExtensions(htmlWithMath)
+
+  // Step 6 – sanitise (allow data-* for our math markers, checkbox input for task list)
+  const clean = DOMPurify.sanitize(htmlRestored, {
     ADD_TAGS: [
       'math', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac',
       'mrow', 'msqrt', 'mover', 'munder', 'mtable', 'mtd', 'mtr',
+      'input',
     ],
-    ADD_ATTR: ['data-formula'],
+    ADD_ATTR: ['data-formula', 'data-kind', 'type', 'checked', 'disabled'],
   })
 
   return clean

@@ -1,0 +1,187 @@
+/* MarkDoc 扩展导出引擎页样式 —— 引入与网页版完全相同的预览排版 CSS */
+
+@import 'katex/dist/katex.min.css';
+/* 与网页版共用同一份预览排版样式（md-preview + 三模板 + 纸张视图） */
+@import '../src/styles/preview.css';
+
+:root {
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand { font-weight: 700; font-size: 15px; }
+.mode {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #2563eb;
+  background: #eff6ff;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.privacy { font-size: 12px; color: #6b7280; }
+
+.body {
+  flex: 1;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+section h2 { font-size: 16px; margin: 0 0 12px; }
+.muted { color: #6b7280; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+
+.job-meta {
+  font-size: 13px;
+  color: #374151;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  line-height: 1.7;
+}
+
+.paper-wrap {
+  background: #e5e7eb;
+  border-radius: 12px;
+  padding: 16px 0;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* 导出舞台容器：与网页预览一致的白纸，尺寸由 --pd-* 变量驱动 */
+#preview-container {
+  background: #ffffff;
+  transform-origin: top center;
+  margin: 0 auto;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.btn {
+  padding: 9px 18px;
+  font-size: 13.5px;
+  border-radius: 9px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111827;
+  cursor: pointer;
+}
+.btn:hover { border-color: #2563eb; color: #2563eb; }
+.btn.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+.btn.primary:hover { opacity: 0.92; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.stats {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #374151;
+  margin-bottom: 12px;
+}
+.issues {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+}
+.issues li {
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+.issues li.warn { background: #fef3c7; color: #92400e; }
+.issues li.error { background: #fee2e2; color: #991b1b; }
+
+.progress-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+  margin: 16px 0;
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: #2563eb;
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.hidden { display: none !important; }
+
+/* 覆盖层卡片：preflight/进度/完成/错误。舞台（preview-container）
+   必须保持渲染状态 —— html2canvas 截图与 PDF 实测布局都依赖真实布局。 */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(243, 244, 246, 0.82);
+  backdrop-filter: blur(2px);
+}
+.overlay > section {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+  padding: 24px 28px;
+  width: 520px;
+  max-width: 92vw;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+/* Mermaid 渲染失败提示（扩展页无 tailwind，退化为简单样式） */
+.mermaid-error {
+  border: 1px solid #fca5a5;
+  background: #fef2f2;
+  color: #b91c1c;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin: 1em 0;
+}

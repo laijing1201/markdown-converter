@@ -1,5 +1,7 @@
 @import 'katex/dist/katex.min.css';
 @import 'highlight.js/styles/github.css';
+/* 预览排版样式：与扩展导出引擎共用（src/styles/preview.css） */
+@import './styles/preview.css';
 
 @tailwind base;
 @tailwind components;
@@ -9,267 +11,18 @@
   background: transparent;
 }
 
-/* ── Paper-like preview typography ──────────────────────────────────────── */
 
-#preview-container {
-  font-family: SimSun, STSong, 'Songti SC', NSimSun, serif;
-  color: #000000;
-  font-size: 16px; /* 小四 12pt */
-}
+/* ── Toast 动画 ──────────────────────────────────────────────────────────── */
 
-/* Headings base */
-#preview-container h1,
-#preview-container h2,
-#preview-container h3,
-#preview-container h4,
-#preview-container h5,
-#preview-container h6 {
-  font-family: SimHei, 'Heiti SC', STHeiti, sans-serif;
-  color: #000000;
-  border-bottom: none;
-}
-
-/* Main Title (H1 usually) */
-#preview-container h1.academic-title {
-  font-size: 29px; /* 二号 22pt */
-  font-weight: 700;
-  text-align: center;
-  margin: 1.5em 0 1em;
-  padding-bottom: 0;
-}
-
-/* Subtitle */
-#preview-container .academic-subtitle,
-#preview-container .academic-subtitle-p {
-  font-family: KaiTi, 'Kaiti SC', STKaiti, serif;
-  font-size: 18.7px; /* 四号 14pt */
-  text-align: center;
-  margin: 0.5em 0 1.5em;
-}
-
-/* Heading 1 (Markdown H2) */
-#preview-container h2:not(.academic-subtitle):not(.academic-ref-title) {
-  font-size: 21.3px; /* 三号 16pt */
-  font-weight: 700;
-  text-align: center;
-  margin: 1.5em 0 1em;
-}
-
-/* Heading 2 (Markdown H3) */
-#preview-container h3 {
-  font-size: 18.7px; /* 四号 14pt */
-  font-weight: 700;
-  text-align: left;
-  margin: 1.2em 0 0.8em;
-}
-
-/* Heading 3 (Markdown H4) */
-#preview-container h4 {
-  font-size: 16px; /* 小四 12pt */
-  font-weight: 700;
-  text-align: left;
-  margin: 1em 0 0.5em;
-}
-
-/* Abstract and Keywords */
-#preview-container p.academic-abstract {
-  font-family: KaiTi, 'Kaiti SC', STKaiti, serif;
-  font-size: 16px; /* 小四 12pt */
-  line-height: 1.5;
-  text-indent: 2em;
-  margin: 0 0 1em;
-}
-
-/* Body Text */
-#preview-container p.academic-p,
-#preview-container p:not([class]) {
-  font-size: 16px; /* 小四 12pt */
-  line-height: 1.5;
-  text-indent: 2em;
-  text-align: justify;
-  margin: 0 0 1em;
-}
-
-/* Reference Title */
-#preview-container h2.academic-ref-title {
-  font-size: 21.3px; /* 三号 16pt */
-  font-weight: 700;
-  text-align: center;
-  margin: 1.5em 0 1em;
-}
-
-/* Reference Items */
-#preview-container p.academic-ref-item,
-#preview-container ul.academic-ref-list li,
-#preview-container ol.academic-ref-list li {
-  font-family: SimSun, STSong, 'Songti SC', NSimSun, serif;
-  font-size: 14px; /* 五号 10.5pt */
-  line-height: 1.5;
-  text-indent: -2em;
-  padding-left: 2em;
-  margin: 0 0 0.5em;
-}
-
-#preview-container ul,
-#preview-container ol {
-  padding-left: 2em;
-  margin: 0.5em 0 1em;
-}
-
-#preview-container ul.academic-ref-list,
-#preview-container ol.academic-ref-list {
-  padding-left: 0;
-  margin-left: 0;
-}
-
-#preview-container li {
-  line-height: 1.5;
-  margin-bottom: 0.3em;
-}
-
-#preview-container li p {
-  text-indent: 0;
-  margin: 0;
-}
-
-#preview-container pre {
-  background: #f6f8fa;
-  border-radius: 6px;
-  border: 1px solid #d0d7de;
-  padding: 1em;
-  margin: 1em 0;
-  font-size: 0.9rem;
-  line-height: 1.6;
-  overflow-x: auto;
-  text-indent: 0;
-  color: #24292f;
-}
-
-#preview-container code {
-  font-family: 'Consolas', 'SFMono-Regular', Menlo, monospace;
-  font-size: 0.9em;
-  color: #d92d20;
-  background: #fdf2f2;
-  padding: 0.2em 0.4em;
-  border-radius: 4px;
-}
-
-#preview-container pre code {
-  color: inherit;
-  background: transparent;
-  padding: 0;
-}
-
-#preview-container table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 1em 0;
-  font-size: 0.9rem;
-}
-
-#preview-container thead {
-  border-top: 2px solid #374151;
-  border-bottom: 1px solid #374151;
-}
-
-#preview-container tbody {
-  border-bottom: 2px solid #374151;
-}
-
-#preview-container th {
-  background: #f9fafb;
-  padding: 10px 12px;
-  text-align: left;
-  font-weight: 600;
-  color: #374151;
-  border: none;
-}
-
-#preview-container td {
-  padding: 6px 12px;
-  text-align: left;
-  border: none;
-}
-
-#preview-container tr {
-  border: none;
-}
-
-#preview-container blockquote {
-  border-left: 4px solid #d1d5db;
-  margin: 1em 0;
-  padding: 0.5em 1.2em;
-  color: #6b7280;
-  background: #f9fafb;
-  font-style: italic;
-  text-indent: 0;
-  border-radius: 0 4px 4px 0;
-}
-
-#preview-container img {
-  max-width: 100%;
-  display: block;
-  margin: 1em auto;
-}
-
-#preview-container .math-block {
-  text-align: center;
-  margin: 1em 0;
-  text-indent: 0;
-}
-
-#preview-container .math-inline {
-  text-indent: 0;
-}
-
-#preview-container hr {
-  margin: 2em 0;
-  border: none;
-  border-top: 1px solid #e5e7eb;
-}
-
-#preview-container ul.task-list {
-  list-style: none;
-  padding-left: 0;
-}
-
-#preview-container .task-list-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5em;
-}
-
-#preview-container .task-list-item input[type="checkbox"] {
-  margin-top: 0.4em;
-}
-
-/* Dark mode overrides */
-.dark #preview-container pre {
-  background: #1e293b;
-  border-left-color: #60a5fa;
-}
-
-.dark #preview-container thead {
-  border-top-color: #6b7280;
-  border-bottom-color: #6b7280;
-}
-
-.dark #preview-container tbody {
-  border-bottom-color: #6b7280;
-}
-
-.dark #preview-container th {
-  background: transparent;
-}
-
-.dark #preview-container blockquote {
-  background: #111827;
-  color: #9ca3af;
-  border-left-color: #6b7280;
-}
-
-.dark #preview-container h1 {
-  border-bottom-color: #374151;
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 /* ── Misc ───────────────────────────────────────────────────────────────── */
@@ -295,7 +48,7 @@
   .flex-1.flex.flex-col.md\:flex-row > :last-child > :first-child {
     display: none !important;
   }
-  
+
   /* Remove height/overflow constraints on all wrappers to allow natural page breaks */
   html, body, #root, .h-screen, .flex-1, .flex, .flex-col, .md\:flex-row, .w-full, .md\:w-1\/2, .h-full, .min-h-0, .overflow-hidden, .overflow-y-auto, .relative {
     display: block !important;
@@ -306,9 +59,9 @@
     position: static !important;
     width: 100% !important;
   }
-  
+
   /* Make the preview container flow naturally */
-  #preview-container {
+  .md-preview {
     position: static !important;
     width: 100% !important;
     margin: 0 !important;
@@ -326,8 +79,17 @@
     page-break-inside: avoid;
     break-inside: avoid;
   }
-  
-  /* Academic paper print defaults */
+
+  /* 分页符：浏览器打印/导出 PDF 时也真正分页 */
+  .pagebreak {
+    border: none !important;
+    page-break-after: always;
+    break-after: page;
+  }
+  .pagebreak::after {
+    display: none;
+  }
+
   @page {
     size: A4;
     margin: 20mm;
