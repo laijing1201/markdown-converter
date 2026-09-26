@@ -14,7 +14,7 @@
     "build:exe": "npm run build:electron",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/test-omml.mjs && tsx scripts/test-markdown.ts && tsx scripts/test-docx-xml.ts && tsx scripts/test-pdf-unit.ts && tsx scripts/test-pdf-writer.ts && tsx scripts/test-adapters.ts && tsx scripts/test-adapter-contract.ts && tsx scripts/test-ext-ui.ts && tsx scripts/test-ext-pipeline.ts",
+    "test": "node scripts/test-omml.mjs && tsx scripts/test-markdown.ts && tsx scripts/test-ai-word-fix.ts && tsx scripts/test-docx-xml.ts && tsx scripts/test-pdf-unit.ts && tsx scripts/test-pdf-writer.ts && tsx scripts/test-adapters.ts && tsx scripts/test-adapter-contract.ts && tsx scripts/test-ext-ui.ts && tsx scripts/test-ext-pipeline.ts",
     "test:web:e2e": "node scripts/test-web-e2e.mjs",
     "icons:ext": "node scripts/generate-ext-icons.mjs",
     "build:extension": "node scripts/build-extension.mjs",

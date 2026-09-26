@@ -27,7 +27,12 @@ export default function PdfPreviewModal({ previewEl, settings, onClose, onExport
     let cancelled = false
     setLayout(null)
     setError(null)
-    runLayout(previewEl, settings, { imageQuality })
+    runLayout(previewEl, settings, {
+      imageQuality,
+      // StrictMode/快速开关下 effect 会执行两次：让过期运行在检查点中止，
+      // 避免它与当前运行争抢共享的测量 stage（样式元素/暗色恢复）导致坐标损坏
+      checkCancel: () => cancelled,
+    })
       .then((result) => {
         if (!cancelled) setLayout(result)
       })
@@ -44,9 +49,9 @@ export default function PdfPreviewModal({ previewEl, settings, onClose, onExport
   useEffect(() => {
     if (!layout) return
     pageRefs.current.forEach((canvas, idx) => {
-      if (canvas) renderPageToCanvas(layout, idx, canvas, pageWidth)
+      if (canvas) renderPageToCanvas(layout, idx, canvas, pageWidth, settings)
     })
-  }, [layout, pageWidth])
+  }, [layout, pageWidth, settings])
 
   const pageCount = layout ? layout.pages.length + layout.tocPageCount : 0
 

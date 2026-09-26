@@ -1,108 +1,136 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { deepAnalyzeEncoding, type FixCandidate } from '../../core/markdown'
+import {
+  analyzeAiWordProblems,
+  fixAiWordContent,
+  DEFAULT_AI_WORD_FIX_OPTIONS,
+  type AiWordFix,
+  type AiWordFixOptions,
+  type AiWordFixCategory,
+} from '../../core/aiWordFix'
 
 interface DeepFixModalProps {
   content: string
-  onApply: (fixed: string) => void
+  onApply: (result: { fixed: string; summary: string[] }) => void
+  /** 应用修复后直接导出 Word（用户点了「修复并导出」） */
+  onApplyAndExport?: (result: { fixed: string; summary: string[] }) => void
   onClose: () => void
 }
 
-type Phase = 'scanning' | 'analyzing' | 'revealing' | 'complete'
+type Phase = 'scanning' | 'complete'
 
-interface StrategyStep {
-  label: string
-  displayName: string
-  progressTarget: number
+interface CategoryMeta {
+  key: AiWordFixCategory
+  icon: string
+  name: string
+  desc: string
 }
 
-const STRATEGY_STEPS: StrategyStep[] = [
-  { label: 'utf8',        displayName: 'UTF-8 重解码',    progressTarget: 35 },
-  { label: 'latin1-utf8', displayName: 'Latin-1 → UTF-8', progressTarget: 55 },
-  { label: 'gbk',         displayName: 'GBK 解码',        progressTarget: 75 },
-  { label: 'big5',        displayName: 'Big5 解码',       progressTarget: 90 },
+const CATEGORY_META: CategoryMeta[] = [
+  { key: 'math', icon: '🧮', name: '公式断层', desc: '定界符转换 · Word 线性公式 → LaTeX · 裸公式环境包裹' },
+  { key: 'chart', icon: '📊', name: '图表错位', desc: '重建被对话界面剥离的 Mermaid 围栏' },
+  { key: 'structure', icon: '🧹', name: '结构污染', desc: '全角字母数字 · 零宽字符 · NBSP 清理' },
 ]
 
-export default function DeepFixModal({ content, onApply, onClose }: DeepFixModalProps) {
+const SCAN_STEPS = ['公式断层检查', '图表错位检查', '结构污染检查', '编码乱码检查']
+
+export default function DeepFixModal({ content, onApply, onApplyAndExport, onClose }: DeepFixModalProps) {
   const [phase, setPhase] = useState<Phase>('scanning')
   const [progress, setProgress] = useState(0)
-  const [currentStepIdx, setCurrentStepIdx] = useState(-1)
-  const [candidates, setCandidates] = useState<FixCandidate[]>([])
-  const [selectedIdx, setSelectedIdx] = useState(0)
-  const [revealIdx, setRevealIdx] = useState(-1)
+  const [stepIdx, setStepIdx] = useState(-1)
+  const [problems, setProblems] = useState<AiWordFix[]>([])
+  const [encodingCandidates, setEncodingCandidates] = useState<FixCandidate[]>([])
+  const [encodingIdx, setEncodingIdx] = useState(-1)
+  const [enabled, setEnabled] = useState<Record<AiWordFixCategory, boolean>>({
+    math: true,
+    chart: true,
+    structure: true,
+  })
   const timers = useRef<ReturnType<typeof setTimeout>[]>([])
 
-  // Clear all timers on unmount
-  useEffect(() => {
-    return () => timers.current.forEach(clearTimeout)
-  }, [])
+  useEffect(() => () => timers.current.forEach(clearTimeout), [])
 
-  // Start the analysis flow
   useEffect(() => {
-    // 1. Run analysis immediately
-    const allCandidates = deepAnalyzeEncoding(content)
-    setCandidates(allCandidates)
+    // 分析本身是同步轻量的；分步动画只做进度反馈
+    const found = analyzeAiWordProblems(content)
+    const encoding = deepAnalyzeEncoding(content)
+    const recommended = encoding.findIndex((c) => c.isDifferent && c.isRecommended)
+    setProblems(found)
+    setEncodingCandidates(encoding)
+    setEncodingIdx(recommended)
 
     const t: ReturnType<typeof setTimeout>[] = []
-
-    // 2. Scanning phase: 0 → 15%
-    t.push(setTimeout(() => {
-      setPhase('analyzing')
-      setProgress(15)
-      setCurrentStepIdx(0)
-    }, 600))
-
-    // 3. Animate through each strategy
-    STRATEGY_STEPS.forEach((step, i) => {
-      const delay = 600 + (i + 1) * 900
+    SCAN_STEPS.forEach((_, i) => {
       t.push(setTimeout(() => {
-        setProgress(step.progressTarget)
-        setCurrentStepIdx(i)
-      }, delay))
+        setStepIdx(i)
+        setProgress(Math.round(((i + 1) / SCAN_STEPS.length) * 88))
+      }, 350 + i * 320))
     })
-
-    // 4. Revealing phase: show each candidate briefly
-    t.push(setTimeout(() => {
-      setPhase('revealing')
-      setProgress(93)
-      setCurrentStepIdx(STRATEGY_STEPS.length)
-      // Walk through candidates
-      const different = allCandidates.filter((c) => c.isDifferent)
-      different.forEach((_, i) => {
-        t.push(setTimeout(() => {
-          setRevealIdx(i)
-        }, 600 + i * 700))
-      })
-    }, 600 + STRATEGY_STEPS.length * 900 + 400))
-
-    // 5. Complete
     t.push(setTimeout(() => {
       setPhase('complete')
       setProgress(100)
-    }, 600 + STRATEGY_STEPS.length * 900 + 400 + (differentCount(allCandidates) * 700 + 500)))
-
+    }, 350 + SCAN_STEPS.length * 320 + 250))
     timers.current = t
-  }, [content]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [content])
 
-  const handleApply = useCallback(() => {
-    const candidate = candidates[selectedIdx]
-    if (candidate) {
-      onApply(candidate.text)
+  const problemsFor = useCallback((key: AiWordFixCategory) => problems.filter((p) => p.category === key), [problems])
+  const categoryCount = useCallback(
+    (key: AiWordFixCategory) => problemsFor(key).reduce((sum, p) => sum + p.count, 0),
+    [problemsFor],
+  )
+  const categoryExamples = useCallback(
+    (key: AiWordFixCategory) => problemsFor(key).flatMap((p) => p.exampleLines).slice(0, 3),
+    [problemsFor],
+  )
+
+  const encodingCandidate = encodingIdx >= 0 ? encodingCandidates[encodingIdx] : null
+  const totalFixCount = useMemo(
+    () => (CATEGORY_META as CategoryMeta[]).reduce((sum, m) => sum + (enabled[m.key] ? categoryCount(m.key) : 0), 0) +
+      (encodingCandidate ? 1 : 0),
+    [enabled, categoryCount, encodingCandidate],
+  )
+
+  const buildResult = useCallback(() => {
+    const opts: AiWordFixOptions = {
+      math: enabled.math,
+      chart: enabled.chart,
+      structure: enabled.structure,
+    }
+    // 编码修复优先（字节层），再跑格式断层修复（语法层）
+    const encodingFixed = encodingCandidate && encodingIdx >= 0 ? encodingCandidates[encodingIdx].text : content
+    const { fixed, fixes } = fixAiWordContent(encodingFixed, { ...DEFAULT_AI_WORD_FIX_OPTIONS, ...opts })
+
+    const summary: string[] = []
+    for (const f of fixes) summary.push(`${f.label} ×${f.count}`)
+    if (encodingCandidate) summary.push(`编码解码：${encodingCandidate.displayName}`)
+    if (summary.length === 0) summary.push('未发现需要修复的问题')
+
+    return { fixed, summary }
+  }, [content, enabled, encodingCandidate, encodingIdx, encodingCandidates])
+
+  const handleApply = useCallback((exportAfter: boolean) => {
+    const result = buildResult()
+    if (exportAfter) {
+      onApplyAndExport?.({ fixed: result.fixed, summary: result.summary })
+    } else {
+      onApply({ fixed: result.fixed, summary: result.summary })
     }
     onClose()
-  }, [candidates, selectedIdx, onApply, onClose])
+  }, [buildResult, onApply, onApplyAndExport, onClose])
 
-  const different = candidates.filter((c) => c.isDifferent)
-  const showCandidates = phase === 'revealing' || phase === 'complete'
-  const canSelect = phase === 'complete'
+  const hasAnyProblem = problems.length > 0 || encodingIdx >= 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col mx-4 transition-colors">
         {/* Header */}
-        <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            🛠 深度编码修复
-          </h2>
+        <div className="shrink-0 flex items-start justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">🧩 AI 内容修复</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              修复 AI 对话复制到 Word 的格式断层：公式乱码 · 图表错位 · 结构污染 · 编码乱码
+            </p>
+          </div>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none"
@@ -112,96 +140,113 @@ export default function DeepFixModal({ content, onApply, onClose }: DeepFixModal
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Progress bar */}
-          <div>
-            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-              <span>{statusMessage(phase, currentStepIdx, STRATEGY_STEPS)}</span>
-              <span>{Math.round(progress)}%</span>
-            </div>
-            <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Strategy steps checklist */}
-          <div className="space-y-1.5">
-            {STRATEGY_STEPS.map((step, i) => {
-              const done = currentStepIdx > i || (phase === 'complete')
-              const active = currentStepIdx === i && phase === 'analyzing'
-              const candidate = candidates.find((c) => c.label === step.label)
-              const hasDiff = candidate && candidate.isDifferent
-              return (
-                <div
-                  key={step.label}
-                  className={`flex items-center gap-2.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
-                    active ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' :
-                    done ? 'text-gray-600 dark:text-gray-400' :
-                    'text-gray-400 dark:text-gray-500'
-                  }`}
-                >
-                  <span className="shrink-0 w-5 text-center">
-                    {done ? '✅' : active ? '⏳' : '⏳'}
-                  </span>
-                  <span className="flex-1">{step.displayName}</span>
-                  {done && hasDiff && candidate.isRecommended && (
-                    <span className="text-xs text-green-600 dark:text-green-400">发现可修复</span>
-                  )}
-                  {done && hasDiff && !candidate.isRecommended && (
-                    <span className="text-xs text-red-500 dark:text-red-400">负优化</span>
-                  )}
-                  {done && !hasDiff && (
-                    <span className="text-xs text-gray-400">无变化</span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Revealing / Candidate comparison */}
-          {showCandidates && different.length > 0 && (
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          {/* Progress */}
+          {phase === 'scanning' && (
             <div>
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                请选择修复方案：
-              </h3>
-              <div className="space-y-2.5">
-                {different.map((c, i) => (
-                  <button
-                    key={c.label}
-                    onClick={() => canSelect && setSelectedIdx(candidates.indexOf(c))}
-                    disabled={!canSelect}
-                    className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
-                      candidates.indexOf(c) === selectedIdx
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-400'
-                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                    } ${!canSelect ? 'cursor-default' : 'cursor-pointer'}`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-sm text-gray-800 dark:text-gray-200">
-                        {c.displayName}
-                      </span>
-                      <span className={`text-xs ${c.isRecommended ? 'text-green-500' : 'text-red-500'}`}>
-                        {c.isRecommended ? '可修复' : `产生乱码: ${c.replacementCount} 个`}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-3 leading-relaxed font-mono bg-white dark:bg-gray-900 rounded p-2 border border-gray-100 dark:border-gray-700">
-                      {previewText(c.text, 300)}
-                    </p>
-                  </button>
-                ))}
+              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                <span>{stepIdx >= 0 ? SCAN_STEPS[stepIdx] : '正在扫描内容特征...'}</span>
+                <span>{Math.round(progress)}%</span>
+              </div>
+              <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
             </div>
           )}
 
-          {/* No fix needed */}
-          {phase === 'complete' && different.length === 0 && (
-            <div className="text-center py-6 text-gray-500 dark:text-gray-400">
-              <p className="text-lg mb-1">✅ 未检测到编码问题</p>
-              <p className="text-sm">文本已经是正确的编码，无需修复</p>
-            </div>
+          {/* 修复报告（complete 后展示） */}
+          {phase === 'complete' && (
+            <>
+              {!hasAnyProblem && (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <p className="text-lg mb-1">✅ 内容很干净</p>
+                  <p className="text-sm">未检测到公式、图表、结构或编码层面的断层</p>
+                </div>
+              )}
+
+              {hasAnyProblem && (
+                <>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    共发现 {totalFixCount} 处可修复问题，勾选需要应用的类别：
+                  </p>
+
+                  {/* 格式断层类别 */}
+                  {CATEGORY_META.map((meta) => {
+                    const count = categoryCount(meta.key)
+                    const exampleLines = categoryExamples(meta.key)
+                    const on = enabled[meta.key] && count > 0
+                    return (
+                      <label
+                        key={meta.key}
+                        className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                          count > 0
+                            ? on
+                              ? 'border-blue-400 bg-blue-50/60 dark:bg-blue-900/20 dark:border-blue-500 cursor-pointer'
+                              : 'border-gray-200 dark:border-gray-600 cursor-pointer'
+                            : 'border-gray-100 dark:border-gray-700 opacity-50 cursor-default'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          disabled={count === 0}
+                          onChange={(e) => setEnabled((prev) => ({ ...prev, [meta.key]: e.target.checked }))}
+                          className="mt-1 accent-blue-600"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                              {meta.icon} {meta.name}
+                            </span>
+                            {count > 0 ? (
+                              <span className="text-xs font-semibold text-blue-600 dark:text-blue-300">{count} 处</span>
+                            ) : (
+                              <span className="text-xs text-gray-400">未发现</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{meta.desc}</p>
+                          {exampleLines.length > 0 && (
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                              示例：第 {exampleLines.join('、')} 行
+                              {categoryCount(meta.key) > exampleLines.length ? ' 等' : ''}
+                            </p>
+                          )}
+                        </div>
+                      </label>
+                    )
+                  })}
+
+                  {/* 编码乱码（保留原深度解码能力） */}
+                  <div
+                    className={`p-3 rounded-lg border transition-colors ${
+                      encodingCandidate
+                        ? 'border-amber-300 bg-amber-50/60 dark:bg-amber-900/20 dark:border-amber-600'
+                        : 'border-gray-100 dark:border-gray-700 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">🔤 编码乱码</span>
+                      {encodingCandidate ? (
+                        <span className="text-xs font-semibold text-amber-600 dark:text-amber-300">发现可修复</span>
+                      ) : (
+                        <span className="text-xs text-gray-400">未发现</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      UTF-8 / GBK / Big5 深度解码（处理整段不可读的乱码文本）
+                    </p>
+                    {encodingCandidate && (
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5 font-mono bg-white dark:bg-gray-900 rounded p-2 border border-gray-100 dark:border-gray-700 line-clamp-2">
+                        {encodingCandidate.text.slice(0, 120)}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </>
           )}
         </div>
 
@@ -211,43 +256,24 @@ export default function DeepFixModal({ content, onApply, onClose }: DeepFixModal
             onClick={onClose}
             className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
           >
-            {phase === 'complete' ? '取消' : '跳过'}
+            取消
           </button>
+          {hasAnyProblem && (
+            <button
+              onClick={() => handleApply(true)}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+            >
+              修复并导出 Word
+            </button>
+          )}
           <button
-            onClick={handleApply}
-            disabled={phase !== 'complete' || candidates.length === 0}
-            className={`px-5 py-2 text-sm font-medium rounded-lg transition-all ${
-              phase === 'complete'
-                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
-                : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-            }`}
+            onClick={() => (hasAnyProblem ? handleApply(false) : onClose())}
+            className="px-5 py-2 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors"
           >
-            {phase === 'complete'
-              ? `应用${candidates[selectedIdx]?.isDifferent ? `「${candidates[selectedIdx].displayName}」` : ''}`
-              : '分析中...'}
+            {phase === 'complete' ? (hasAnyProblem ? `应用修复（${totalFixCount} 处）` : '关闭') : '分析中...'}
           </button>
         </div>
       </div>
     </div>
   )
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function statusMessage(phase: Phase, stepIdx: number, steps: StrategyStep[]): string {
-  if (phase === 'scanning') return '正在扫描编码特征...'
-  if (phase === 'analyzing' && stepIdx >= 0 && stepIdx < steps.length) {
-    return steps[stepIdx].displayName
-  }
-  if (phase === 'revealing') return '正在展示修复结果...'
-  return '分析完成，请选择方案'
-}
-
-function differentCount(candidates: FixCandidate[]): number {
-  return candidates.filter((c) => c.isDifferent).length
-}
-
-function previewText(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text
-  return text.substring(0, maxLen) + '...'
 }

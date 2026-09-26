@@ -388,9 +388,20 @@ export default function App() {
     showToast('🪄', `已修复 ${fixes.length} 处格式问题`, fixes.slice(0, 4).map((f) => `第 ${f.line} 行：${f.message}`))
   }, [markdownContent, showToast])
 
-  const handleDeepFixApply = useCallback((fixed: string) => {
-    setMarkdownContent(fixed)
-  }, [])
+  const handleDeepFixApply = useCallback((result: { fixed: string; summary: string[] }) => {
+    setMarkdownContent(result.fixed)
+    showToast('🧩', result.summary[0] ?? '已应用 AI 内容修复', result.summary.slice(1, 4))
+  }, [showToast])
+
+  /** 「修复并导出 Word」：应用修复 → 等预览刷新 → 直接走导出链路 */
+  const exportWordRef = useRef<(() => void) | null>(null)
+  exportWordRef.current = () => handleExport('docx')
+  const handleDeepFixApplyAndExport = useCallback((result: { fixed: string; summary: string[] }) => {
+    setMarkdownContent(result.fixed)
+    showToast('🧩', result.summary[0] ?? '已应用 AI 内容修复', result.summary.slice(1, 4))
+    // 等待受控预览（useDeferredValue）刷新后再导出，导出读取的是预览 DOM
+    setTimeout(() => exportWordRef.current?.(), 600)
+  }, [showToast])
 
   const handleSmartFormatApply = useCallback(() => {
     setMarkdownContent(prev => smartFormatText(prev))
@@ -624,6 +635,7 @@ export default function App() {
         <DeepFixModal
           content={markdownContent}
           onApply={handleDeepFixApply}
+          onApplyAndExport={handleDeepFixApplyAndExport}
           onClose={() => setShowDeepFix(false)}
         />
       )}
@@ -814,7 +826,7 @@ export default function App() {
             <EditorPanel
               ref={editorRef}
               value={markdownContent}
-              placeholderText={DEFAULT_CONTENT}
+              placeholderText="在此粘贴 AI 回答或 Markdown 内容…"
               onChange={handleContentChange}
               onScrollContainerReady={setEditorScrollEl}
               onRepaired={handlePasteRepaired}

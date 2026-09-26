@@ -80,9 +80,9 @@ export default function Toolbar({
         <button
           onClick={onDeepFix}
           className={ghostBtn}
-          title="深度分析并修复编码乱码"
+          title="AI 内容修复：公式乱码（Word 线性公式 / 定界符 / 裸环境）、Mermaid 图表围栏重建、全角与零宽字符清理、编码乱码，修复后可直接导出 Word"
         >
-          🛠 修复乱码
+          🧩 AI 修复
         </button>
       </div>
 

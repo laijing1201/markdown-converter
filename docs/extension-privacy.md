@@ -25,7 +25,7 @@ MarkDoc 扩展**在你的浏览器本地**完成全部内容提取与文档生�
 唯一的网络访问发生在**你自己**的操作下：
 
 - 导出文档中引用的**外链图片**：生成 Word / PDF 时需要下载图片本身（浏览器直接向图片源请求）；
-- 「在 MarkDoc 中编辑」：按你的设置打开 MarkDoc 网页版（默认 `markdocshift.netlify.app`）。
+- 「在 MarkDoc 中编辑」：按你的设置打开 MarkDoc 网页版（默认 `laijing1201.github.io/markdown-converter`）。
 
 ## 数据保存在哪里？保存多久？
 
@@ -42,7 +42,7 @@ MarkDoc 扩展**在你的浏览器本地**完成全部内容提取与文档生�
 | --- | --- |
 | `storage` | 保存快速设置与一次性导出任务（全部本地） |
 | `host_permissions: chatgpt.com / chat.openai.com / chat.deepseek.com / claude.ai / gemini.google.com / kimi.com` | 在受支持的 AI 页面注入导出按钮（content script） |
-| `host_permissions: markdocshift.netlify.app / localhost:5173` | 「在 MarkDoc 中编辑」桥接（仅传递你主动选择的内容） |
+| `host_permissions: laijing1201.github.io/markdown-converter / localhost:5173` | 「在 MarkDoc 中编辑」桥接（仅传递你主动选择的内容） |
 
 没有 `<all_urls>`、没有 `downloads`（下载通过页面内 `<a download>` 完成）、没有 `scripting` / `activeTab` / `cookies`。
 

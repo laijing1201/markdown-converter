@@ -58,7 +58,7 @@ MarkDoc 把 AI 对话变成排版专业的文档。
 | --- | --- |
 | `storage` | 在本地保存导出偏好设置与一次性导出任务 |
 | Host: `chatgpt.com`, `chat.openai.com`, `chat.deepseek.com`, `claude.ai`, `gemini.google.com`, `kimi.com` | 在受支持的 AI 对话页面注入导出按钮并读取页面内容以生成文档 |
-| Host: `markdocshift.netlify.app`, `localhost:5173` | 「在 MarkDoc 中编辑」功能：将所选内容填入 MarkDoc 网页版编辑器 |
+| Host: `laijing1201.github.io/markdown-converter`, `localhost:5173` | 「在 MarkDoc 中编辑」功能：将所选内容填入 MarkDoc 网页版编辑器 |
 
 单条用途声明（Single purpose）：将 AI 对话内容在本地转换为 Word / PDF 文档。
 
