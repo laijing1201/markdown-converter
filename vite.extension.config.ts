@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url'
 export default defineConfig({
   root: fileURLToPath(new URL('./extension', import.meta.url)),
   base: '/',
+  // 共享仓库根目录 .env：账号体系（VITE_SUPABASE_*）网站与扩展读同一份配置
+  envDir: fileURLToPath(new URL('..', import.meta.url)),
   publicDir: 'public',
   define: {
     // 扩展包内字体为 WOFF v1（构建期转换，运行时解压回 TTF；WOFF2 与 MV3 CSP 冲突）

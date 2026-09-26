@@ -29,6 +29,10 @@ jobs:
         run: npm install
       - name: Build
         run: npm run build
+        env:
+          # 配置这两个仓库 Secrets 后自动启用账号体系；未配置时为空 = 关闭态（行为不变）
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>隐私政策 — MarkDoc</title>
+  <style>
+    body { font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+           max-width: 720px; margin: 40px auto; padding: 0 20px; color: #1f2937; line-height: 1.75; }
+    h1 { font-size: 22px; } h2 { font-size: 16px; margin-top: 28px; }
+    .meta { color: #6b7280; font-size: 13px; }
+    .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; font-size: 14px; }
+    a { color: #2563eb; }
+  </style>
+</head>
+<body>
+  <h1>MarkDoc 隐私政策（草案）</h1>
+  <p class="meta">生效日期：____-__-__　·　正式上线前需法务审定</p>
+
+  <h2>1. 我们收集哪些信息</h2>
+  <ul>
+    <li><b>邮箱地址</b>：注册账号时收集，用于验证账号、找回密码、发送必要的账号通知。</li>
+    <li><b>转换内容</b>：登录用户每次导出时保存的 Markdown 原文与转换选项（可在历史记录中随时删除或清空，也可注销账号彻底删除）。</li>
+    <li><b>匿名使用信息</b>：未登录用户导出时，服务端记录设备随机 ID、浏览器特征哈希与 IP 哈希（<b>不存明文 IP</b>），仅用于免费额度计数，不用于广告或画像。</li>
+    <li><b>匿名用户的转换内容</b>不会上传服务器，仅保存在你的浏览器本地。</li>
+  </ul>
+
+  <h2>2. 信息存储位置与期限</h2>
+  <div class="card">
+    数据存储于 Supabase（PostgreSQL 数据库，位于海外数据中心）。云端历史默认保留 365 天，可随时手动删除；账号注销后，个人数据（含历史记录、邮箱）将在 30 天内从数据库与备份中彻底删除。
+  </div>
+
+  <h2>3. 信息的使用方式</h2>
+  <ul>
+    <li>邮箱：仅用于账号验证、密码重置与必要的服务通知，不发送营销邮件。</li>
+    <li>转换内容：仅用于向你提供历史记录与再次导出功能，不用于模型训练或任何第三方共享。</li>
+    <li>管理员访问你的历史正文需超级管理员权限且会留下不可篡改的审计记录。</li>
+  </ul>
+
+  <h2>4. 你的权利</h2>
+  <ul>
+    <li>随时导出自己的全部历史记录（JSON）。</li>
+    <li>随时删除单条、批量或全部历史记录。</li>
+    <li>随时注销账号：登录后无法找回，关联数据按上述期限删除。</li>
+  </ul>
+
+  <h2>5. 联系方式</h2>
+  <p>隐私相关问题请联系：<b>____@____</b></p>
+  <p><a href="./">返回 MarkDoc</a>　·　<a href="./terms.html">服务条款</a></p>
+</body>
+</html>

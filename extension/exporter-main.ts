@@ -16,6 +16,7 @@ import { runPreflight, type PreflightResult } from '../src/core/preflight'
 import { buildDocxBlob } from '../src/core/exporter'
 import { buildPdf, PdfExportError } from '../src/core/pdf/export'
 import { buildExportFilename } from '../src/core/filename'
+import { accountEnabled, requestExportTicket, signIn, type TicketResult } from '../src/core/account'
 import { takeExportJob, stageImport, loadQuickSettings, recordExportResult } from './src/storage'
 import { MarkDocExtError } from './src/errors'
 import type { ExportJob } from './src/types'
@@ -34,6 +35,7 @@ const TARGET_LABEL = { docx: 'Word', pdf: 'PDF' } as const
 let currentJob: ExportJob | null = null
 let pendingTarget: 'docx' | 'pdf' = 'docx'
 let lastPreflight: PreflightResult | null = null
+let currentContainer: HTMLElement | null = null
 
 function showView(name: 'stage' | 'preflight' | 'progress' | 'done' | 'error') {
   // 舞台（stage-view / preview-container）常驻可见：html2canvas 截图与
@@ -134,8 +136,59 @@ async function openInMarkDoc(job: ExportJob): Promise<void> {
   window.close()
 }
 
+/** 配额拦截 → 内联登录表单（账号与网站通用；注册引导跳网站 ?auth=register） */
+async function showQuotaLogin(res: Extract<TicketResult, { ok: false }>): Promise<void> {
+  const wrap = $('quota-login')
+  const msg = $('quota-msg')
+  msg.hidden = true
+  msg.textContent = ''
+  wrap.classList.remove('hidden')
+  $('error-detail').textContent = res.message
+  showView('error')
+  try {
+    const quick = await loadQuickSettings()
+    ;($('quota-register-link') as HTMLAnchorElement).href = `${quick.markdocUrl.replace(/\/$/, '')}?auth=register`
+  } catch { /* 取不到设置就用默认链接 */ }
+  const btn = $('btn-quota-login') as HTMLButtonElement
+  btn.onclick = async () => {
+    const email = ($('quota-email') as HTMLInputElement).value.trim()
+    const password = ($('quota-password') as HTMLInputElement).value
+    msg.hidden = false
+    msg.textContent = '登录中…'
+    btn.disabled = true
+    const r = await signIn(email, password)
+    btn.disabled = false
+    if (!r.ok) {
+      msg.textContent = r.message
+      return
+    }
+    wrap.classList.add('hidden')
+    const job = currentJob
+    const container = currentContainer
+    if (job && container) void runExport(job, pendingTarget, container)
+  }
+}
+
 async function runExport(job: ExportJob, target: 'docx' | 'pdf', container: HTMLElement): Promise<void> {
+  currentContainer = container
   pendingTarget = target
+  // ── 配额执法点：与网站同一套服务端计次（匿名免费 1 次 + 同 IP 日限额）──
+  if (accountEnabled) {
+    showView('progress')
+    setProgress(2, '正在校验使用配额…')
+    const res = await requestExportTicket(target, { source: 'extension' })
+    if (!res.ok) {
+      await recordExportResult({ target, ok: false, errorCode: 'MD-EXT-011', at: Date.now() })
+      if (res.reason === 'QUOTA_EXCEEDED' || res.reason === 'AUTH_REQUIRED') {
+        await showQuotaLogin(res)
+      } else {
+        $('quota-login').classList.add('hidden')
+        $('error-detail').textContent = res.message || '网络错误，请稍后重试'
+        showView('error')
+      }
+      return
+    }
+  }
   showView('progress')
   setProgress(2, target === 'docx' ? '正在生成 Word…' : '正在准备内容…')
   const filename = `${buildExportFilename(job.markdown, job.documentTitle)}`

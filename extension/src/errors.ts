@@ -16,6 +16,7 @@ export type ExtErrorCode =
   | 'MD-EXT-008' // BridgeFailed
   | 'MD-EXT-009' // StorageFailed
   | 'MD-EXT-010' // AdapterOutdated
+  | 'MD-EXT-011' // QuotaExceeded
 
 export interface ErrorInfo {
   /** 稳定的英文代号（诊断用） */
@@ -64,6 +65,10 @@ export const ERROR_INFO: Record<ExtErrorCode, ErrorInfo> = {
   'MD-EXT-010': {
     name: 'AdapterOutdated',
     userMessage: 'MarkDoc 可能无法完整识别当前页面，网站结构可能已更新。',
+  },
+  'MD-EXT-011': {
+    name: 'QuotaExceeded',
+    userMessage: '免费试用已结束，请注册并登录 MarkDoc 后继续使用。',
   },
 }
 

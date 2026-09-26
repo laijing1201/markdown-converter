@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { TemplateId } from '../../core/templates'
 import { DESKTOP_DOWNLOAD_URL } from '../../platform'
 import TemplateQuickSwitch from './TemplateQuickSwitch'
@@ -22,6 +23,8 @@ interface ToolbarProps {
   onTemplateChange: (id: TemplateId) => void
   /** 当前是否运行在 Electron 桌面版（是则隐藏「桌面版」入口） */
   desktop: boolean
+  /** 账号体系徽标（登录状态 / 剩余免费次数）；未启用账号体系时不传 */
+  accountBadge?: ReactNode
 }
 
 const ghostBtn =
@@ -45,6 +48,7 @@ export default function Toolbar({
   templateId,
   onTemplateChange,
   desktop,
+  accountBadge,
 }: ToolbarProps) {
   return (
     <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm transition-colors flex-wrap">
@@ -148,6 +152,7 @@ export default function Toolbar({
         >
           {darkMode ? '☀' : '🌙'}
         </button>
+        {accountBadge}
         {!desktop && (
           <button
             onClick={() => window.open(DESKTOP_DOWNLOAD_URL, '_blank', 'noopener')}

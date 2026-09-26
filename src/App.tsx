@@ -10,6 +10,17 @@ import HistoryModal from './components/modals/HistoryModal'
 import PreExportModal from './components/modals/PreExportModal'
 import ExportProgressModal from './components/modals/ExportProgressModal'
 import PdfPreviewModal from './components/modals/PdfPreviewModal'
+import AuthModal, { type AuthModalMode } from './components/modals/AuthModal'
+import {
+  accountEnabled,
+  onAuthChange,
+  refreshRemaining,
+  requestExportTicket,
+  saveCloudHistory,
+  signOut,
+  type AccountUser,
+  type Remaining,
+} from './core/account'
 import { validateMarkdown, detectEncodingIssues } from './core/validator'
 import { smartFormatText } from './core/formatter'
 import { repairAiMarkdown, type RepairFix } from './core/repair'
@@ -127,6 +138,11 @@ export default function App() {
   const [mobileTab, setMobileTab] = useState<'editor' | 'preview'>('editor')
   const [preflight, setPreflight] = useState<PreflightResult | null>(null)
   const [pendingExport, setPendingExport] = useState<'docx' | 'pdf' | null>(null)
+
+  // ── 账号体系状态（未配置 Supabase 时 accountEnabled=false，全部逻辑旁路）──
+  const [authModal, setAuthModal] = useState<{ open: boolean; mode: AuthModalMode; banner?: string; resume: 'docx' | 'pdf' | null }>({ open: false, mode: 'login', resume: null })
+  const [authUser, setAuthUser] = useState<AccountUser | null>(null)
+  const [quotaRemaining, setQuotaRemaining] = useState<Remaining | null>(null)
   const [busy, setBusy] = useState(false)
   const [exportProgress, setExportProgress] = useState<{ pct: number; label: string } | null>(null)
   const [showPdfPreview, setShowPdfPreview] = useState(false)
@@ -466,6 +482,38 @@ export default function App() {
     }
   }, [markdownContent, settings, showToast])
 
+  /**
+   * 导出统一入口（配额执法点）：preflight 通过后、真正导出前向服务端申请票据。
+   * 匿名免费次数用完 → 弹注册引导；登录后不限次（system_configs 可改）。
+   * 票据成功且已登录 → 异步保存云端历史（不阻塞导出）。
+   */
+  const runExportGated = useCallback(async (target: 'docx' | 'pdf') => {
+    if (!accountEnabled) {
+      if (target === 'pdf') void doExportPdf()
+      else void doExportDocx()
+      return
+    }
+    const res = await requestExportTicket(target)
+    if (res.ok) {
+      void saveCloudHistory({
+        format: target,
+        title: buildExportFilename(markdownContent, settings.documentTitle),
+        contentMd: markdownContent,
+        options: settings as unknown as Record<string, unknown>,
+      })
+      if (target === 'pdf') void doExportPdf()
+      else void doExportDocx()
+      return
+    }
+    if (res.reason === 'QUOTA_EXCEEDED') {
+      setAuthModal({ open: true, mode: 'register', banner: res.message, resume: target })
+    } else if (res.reason === 'AUTH_REQUIRED') {
+      setAuthModal({ open: true, mode: 'login', banner: '请先登录后继续导出', resume: target })
+    } else {
+      showToast('⚠️', res.message || '网络错误，请稍后重试')
+    }
+  }, [markdownContent, settings, doExportDocx, doExportPdf, showToast])
+
   const handleExport = useCallback((target: 'docx' | 'pdf') => {
     const previewEl = document.getElementById(previewId)
     if (!previewEl || !markdownContent.trim()) {
@@ -477,12 +525,10 @@ export default function App() {
     if (result.issues.length > 0) {
       setPendingExport(target)
       setPreflight(result)
-    } else if (target === 'docx') {
-      void doExportDocx()
     } else {
-      void doExportPdf()
+      void runExportGated(target)
     }
-  }, [markdownContent, doExportDocx, doExportPdf, showToast])
+  }, [markdownContent, runExportGated, showToast])
 
   const handleExportWord = useCallback(() => handleExport('docx'), [handleExport])
   const handleExportPdf = useCallback(() => handleExport('pdf'), [handleExport])
@@ -491,9 +537,8 @@ export default function App() {
     const target = pendingExport
     setPreflight(null)
     setPendingExport(null)
-    if (target === 'pdf') void doExportPdf()
-    else void doExportDocx()
-  }, [pendingExport, doExportDocx, doExportPdf])
+    if (target) void runExportGated(target)
+  }, [pendingExport, runExportGated])
 
   const handlePreviewPdf = useCallback(() => {
     if (!markdownContent.trim()) {
@@ -505,8 +550,8 @@ export default function App() {
 
   const handlePreviewExport = useCallback(async () => {
     setShowPdfPreview(false)
-    await doExportPdf()
-  }, [doExportPdf])
+    await runExportGated('pdf')
+  }, [runExportGated])
 
   // ── Rich copy（粘贴进 Word 保留排版）──────────────────────────────────────
   const handleCopyRich = useCallback(async () => {
@@ -591,6 +636,72 @@ export default function App() {
     }
   }, [markdownContent, settings])
 
+  // ── 账号体系：登录态监听 + 剩余次数展示 ──────────────────────────────────
+  useEffect(() => {
+    if (!accountEnabled) return
+    let cleanup: (() => void) | null = null
+    void onAuthChange((u) => {
+      setAuthUser(u)
+      void refreshRemaining().then((r) => setQuotaRemaining(u ? null : r))
+    }).then((un) => { cleanup = un })
+    void refreshRemaining().then((r) => setQuotaRemaining(r))
+    return () => cleanup?.()
+  }, [])
+
+  // 插件端注册引导跳转：markdocUrl?auth=register 直开注册弹窗
+  useEffect(() => {
+    if (!accountEnabled) return
+    const auth = new URLSearchParams(location.search).get('auth')
+    if (auth === 'register' || auth === 'login') {
+      setAuthModal({
+        open: true,
+        mode: auth,
+        banner: auth === 'register' ? '注册并验证邮箱后，网站与插件的导出记录都会随账号保存。' : undefined,
+        resume: null,
+      })
+    }
+  }, [])
+
+  const handleAuthed = useCallback((resume: 'docx' | 'pdf' | null) => {
+    setQuotaRemaining(null)
+    if (resume) void runExportGated(resume)
+  }, [runExportGated])
+
+  const handleSignOut = useCallback(() => {
+    void signOut()
+    setAuthUser(null)
+  }, [])
+
+  // 工具栏徽标：未登录显示「登录 · 剩余 N 次」（需求 UI/UX §6），用完显示「注册后继续」
+  const accountBadge = accountEnabled ? (
+    authUser ? (
+      <button
+        onClick={handleSignOut}
+        className="max-w-[11rem] truncate px-2.5 py-1.5 text-xs rounded-md bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors"
+        title={`已登录：${authUser.email}（点击退出登录，历史记录保留在账号中）`}
+      >
+        {authUser.email}
+      </button>
+    ) : quotaRemaining?.deviceLeft === 0 ? (
+      <button
+        onClick={() => setAuthModal({ open: true, mode: 'register', banner: '免费试用已结束，请注册后继续使用。', resume: null })}
+        className="px-2.5 py-1.5 text-xs rounded-md bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors whitespace-nowrap"
+        title="免费试用已结束，注册并验证邮箱后可继续使用"
+      >
+        注册后继续
+      </button>
+    ) : (
+      <button
+        onClick={() => setAuthModal({ open: true, mode: 'login', resume: null })}
+        className="px-2.5 py-1.5 text-xs rounded-md bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors whitespace-nowrap"
+        title="登录后历史记录随账号保存，任意设备可查看"
+      >
+        登录
+        {quotaRemaining?.deviceLeft != null ? ` · 免费剩余 ${quotaRemaining.deviceLeft} 次` : ''}
+      </button>
+    )
+  ) : undefined
+
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900 transition-colors">
       <Toolbar
@@ -611,6 +722,7 @@ export default function App() {
         templateId={settings.template}
         onTemplateChange={handleTemplateChange}
         desktop={capabilities.desktop}
+        accountBadge={accountBadge}
       />
 
       {/* ── 移动端编辑/预览切换 ──────────────────────────────────────── */}
@@ -631,6 +743,14 @@ export default function App() {
       </div>
 
       {/* ── Modals ──────────────────────────────────────────────────── */}
+      <AuthModal
+        open={authModal.open}
+        initialMode={authModal.mode}
+        banner={authModal.banner}
+        resumeTarget={authModal.resume}
+        onClose={() => setAuthModal((m) => ({ ...m, open: false }))}
+        onAuthed={handleAuthed}
+      />
       {showDeepFix && (
         <DeepFixModal
           content={markdownContent}

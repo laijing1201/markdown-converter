@@ -42,6 +42,17 @@
         <section id="error-view" class="hidden">
           <h2>⚠️ 导出失败</h2>
           <p id="error-detail" class="muted"></p>
+          <!-- 免费次数用完 / 未登录：内联登录后继续导出（账号与网站通用） -->
+          <div id="quota-login" class="hidden">
+            <p class="muted">注册 / 登录后历史记录随账号保存，网站与插件通用。</p>
+            <input id="quota-email" type="email" placeholder="邮箱地址" autocomplete="email" />
+            <input id="quota-password" type="password" placeholder="密码" autocomplete="current-password" />
+            <p id="quota-msg" class="muted" hidden></p>
+            <div class="actions">
+              <button id="btn-quota-login" class="btn primary">登录并继续导出</button>
+              <a id="quota-register-link" class="btn" target="_blank" rel="noreferrer">没有账号？去网站注册</a>
+            </div>
+          </div>
           <div class="actions">
             <button id="btn-error-close" class="btn primary">关闭</button>
           </div>
