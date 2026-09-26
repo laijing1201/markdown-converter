@@ -29,6 +29,8 @@
 .md-preview td,
 .md-preview th {
   text-indent: 0;
+  /* fixed 列宽下长单词/URL 允许断行，避免溢出单元格 */
+  overflow-wrap: break-word;
 }
 
 /* 标题自动编号 span（预览注入；导出时剥离，Word 用真正的 numbering） */

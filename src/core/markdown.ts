@@ -94,6 +94,54 @@ export function restoreMathInHtml(html: string): string {
   )
 }
 
+// ─── CJK 邻接的粗体/斜体修正 ─────────────────────────────────────────────────
+
+const ZWSP = '\u200B'
+const CJK_LETTER_RE = /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF]/
+// ASCII 标点 + Unicode 通用标点 + CJK/全角标点
+const PUNCT_RE = /[!-/:-@[-`{-~\u2000-\u206F\u3000-\u303F\uFF01-\uFF65]/
+
+/**
+ * CommonMark 的 flanking 规则会让中文文档里最常见的写法失效：
+ *   `**位置：**引言贡献` —— 闭合 ** 前是标点（：）、后紧跟汉字，
+ *   不满足 right-flanking，marked 输出字面星号。
+ *   （后跟空格/引号/标点时正常，所以同一份文档里时好时坏。）
+ * 修复：给失配的定界符在内侧补一个零宽空格使其满足规则，marked 解析完成后
+ * 再把零宽空格统一剥除，不进入最终 HTML。只在失配边界至少一侧是 CJK 时介入，
+ * 纯英文/纯符号输入的 CommonMark 行为保持不变。数学占位符在本步骤之前已提取，
+ * 公式内容不受影响。
+ */
+export function repairCjkEmphasis(markdown: string): string {
+  let out = ''
+  let i = 0
+  const n = markdown.length
+  while (i < n) {
+    const two = markdown.slice(i, i + 2)
+    if (two === '**' || two === '__') {
+      const prev = i > 0 ? markdown[i - 1] : ''
+      const next = i + 2 < n ? markdown[i + 2] : ''
+      // 闭合失败：前是标点、后是 CJK → 在 ** 内侧（前）补零宽空格
+      if (prev && PUNCT_RE.test(prev) && next && CJK_LETTER_RE.test(next)) {
+        out += ZWSP + two
+        i += 2
+        continue
+      }
+      // 打开失败：前是 CJK、后是标点 → 在 ** 内侧（后）补零宽空格
+      if (next && CJK_LETTER_RE.test(prev) && PUNCT_RE.test(next)) {
+        out += two + ZWSP
+        i += 2
+        continue
+      }
+      out += two
+      i += 2
+      continue
+    }
+    out += markdown[i]
+    i++
+  }
+  return out
+}
+
 // ─── Block extensions: 分页符 / 图题表题 ──────────────────────────────────────
 
 /** 统计分页符数量（preflight/统计用） */
@@ -190,8 +238,8 @@ export function restoreBlockExtensions(html: string): string {
  *
  * Pipeline:
  *   raw MD  →  block extensions (pagebreak/caption)  →  extract math placeholders
- *   →  marked (with highlight.js)  →  restore math  →  restore block extensions
- *   →  DOMPurify  →  output
+ *   →  CJK emphasis repair  →  marked (with highlight.js)  →  restore math
+ *   →  restore block extensions  →  strip ZWSP  →  DOMPurify  →  output
  */
 export function markdownToSafeHtml(markdown: string): string {
   // Step 1 – pagebreak / caption 语法预处理
@@ -200,8 +248,11 @@ export function markdownToSafeHtml(markdown: string): string {
   // Step 2 – protect LaTeX
   const withPlaceholders = extractMathPlaceholders(withExtensions)
 
+  // Step 2.5 – CJK 邻接的 **强调** 修正（零宽空格在 Step 7 剥除）
+  const withEmphasisFix = repairCjkEmphasis(withPlaceholders)
+
   // Step 3 – marked parse (handles code blocks, tables, etc.)
-  const rawHtml = marked.parse(withPlaceholders) as string
+  const rawHtml = marked.parse(withEmphasisFix) as string
 
   // Step 4 – put math markers back as HTML elements
   const htmlWithMath = restoreMathInHtml(rawHtml)
@@ -209,8 +260,11 @@ export function markdownToSafeHtml(markdown: string): string {
   // Step 5 – pagebreak / caption 占位还原 + task-list 类名
   const htmlRestored = restoreBlockExtensions(htmlWithMath)
 
-  // Step 6 – sanitise (allow data-* for our math markers, checkbox input for task list)
-  const clean = DOMPurify.sanitize(htmlRestored, {
+  // Step 6 – 剥除 CJK 强调修正引入的零宽空格（不影响复制/搜索）
+  const htmlClean = htmlRestored.replace(/\u200B/g, '')
+
+  // Step 7 – sanitise (allow data-* for our math markers, checkbox input for task list)
+  const clean = DOMPurify.sanitize(htmlClean, {
     ADD_TAGS: [
       'math', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac',
       'mrow', 'msqrt', 'mover', 'munder', 'mtable', 'mtd', 'mtr',

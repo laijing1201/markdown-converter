@@ -522,4 +522,26 @@ export function resetFontCacheForTest(): void {
   faceRegistered.clear()
   notices.length = 0
   noticedFamilies.clear()
+  coverageCache.clear()
+}
+
+// ── 字形覆盖率（缺字回退用）──────────────────────────────────────────────────
+
+const coverageCache = new Map<string, Set<number>>()
+
+/**
+ * 字体实际拥有的码点集合（fontkit characterSet）。
+ * 子集字体只含各自覆盖的字符；正文里偶尔出现的特殊符号（∂ − ⊤ → 等）
+ * 不在 Noto Serif/Sans SC 里，渲染时会画成 .notdef 空框 —— 渲染器据此
+ * 把缺字字符指派给第一个覆盖它的回退字体。
+ */
+export async function getFontCoverage(key: string): Promise<Set<number>> {
+  const hit = coverageCache.get(key)
+  if (hit) return hit
+  const full = await loadFontBytes(key)
+  const fontkit = (await import('@pdf-lib/fontkit')).default
+  const fkFont = fontkit.create(full as unknown as Uint8Array)
+  const set = new Set<number>(fkFont.characterSet ?? [])
+  coverageCache.set(key, set)
+  return set
 }

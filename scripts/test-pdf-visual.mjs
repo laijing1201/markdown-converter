@@ -24,6 +24,7 @@ const TARGETS = [
   'caseC-table-heavy.pdf',
   'caseD-code-mermaid-image.pdf',
   'caseE-academic.pdf',
+  'caseI-review-report.pdf',
 ]
 
 const args = process.argv.slice(2)

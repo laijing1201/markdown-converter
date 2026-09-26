@@ -43,3 +43,6 @@ extension/src/lib/vendor/wawoff2-decompress.js
 artifacts/
 tests/ext/out/
 tests/pdf/out/
+
+# GUI 测试截图（本地调试产物，不入库）
+gui-test-screenshots/

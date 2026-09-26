@@ -171,6 +171,105 @@ function applyCaptionNumbers(container: HTMLElement) {
   })
 }
 
+// ── 表格列宽均衡（防 CJK 长文本被挤成一字一行）─────────────────────────────
+
+/**
+ * 浏览器的 auto 表格布局在「列数多 + CJK 长文本」时会把部分列挤到只剩
+ * 一两个字的宽度：CJK 任意字符都可断行，这些列的 min-content 极小，
+ * 宽度分配会饥饿。这里按各列内容长度加权注入 colgroup 百分比宽度并启用
+ * fixed 布局，让列宽与内容量成比例。预览与导出（克隆预览 DOM）两端同时生效。
+ */
+function balanceTableColumns(container: HTMLElement): void {
+  container.querySelectorAll('table').forEach((table) => {
+    if (table.querySelector('colgroup')) return // 已有列宽定义，不覆盖
+    const rows = Array.from(table.rows)
+    let colCount = 0
+    for (const tr of rows) colCount = Math.max(colCount, tr.cells.length)
+    if (colCount < 2) return
+
+    // 权重 = 该列最长单元格的近似渲染宽度：CJK/全角字符按 2 单位、其余按 1
+    // （总长截到 80，最长不可断单词截到 120 —— URL/长标识符列需要保底宽度）。
+    // colspan 不计入。
+    const unitLen = (s: string): number => {
+      let n = 0
+      for (const ch of s) n += /[\u1100-\u11FF\u2E80-\uA4CF\uF900-\uFAFF\uFF00-\uFFEF]/.test(ch) ? 2 : 1
+      return n
+    }
+    const weights = new Array<number>(colCount).fill(0)
+    const longestPx = new Array<number>(colCount).fill(0)
+    // 不可断 token 宽度用 canvas 按单元格自身字体实测；
+    // 无 canvas 环境（jsdom）退化为字符数 × 8px 估算
+    let measurer: CanvasRenderingContext2D | null = null
+    try {
+      measurer = container.ownerDocument!.createElement('canvas').getContext('2d')
+    } catch { /* ignore */ }
+    const tokenPx = (token: string, cell: HTMLElement): number => {
+      if (!measurer) return token.length * 8
+      const cs = getComputedStyle(cell)
+      measurer.font = `${cs.fontSize} ${cs.fontFamily}`
+      // ×1.2：PDF 嵌入的 Noto 系字体拉丁字形比预览字体（宋体系）更宽
+      return measurer.measureText(token).width * 1.2
+    }
+    for (const tr of rows) {
+      for (const cell of Array.from(tr.cells)) {
+        if (cell.colSpan > 1) continue
+        const idx = cell.cellIndex
+        if (idx < 0 || idx >= colCount) continue
+        const text = (cell.textContent || '').replace(/\s+/g, ' ').trim()
+        // 不可断 token = 不含 CJK/全角字符与空格的连续串：
+        // CJK 任意字符都可断行，不构成 min-content；Latin/URL/标识符才会
+        let longest = 0
+        let longestToken = ''
+        for (const token of text.split(/[\u1100-\u11FF\u2E80-\uA4CF\uF900-\uFAFF\uFF00-\uFFEF\s]+/)) {
+          if (token && unitLen(token) > longest) {
+            longest = unitLen(token)
+            longestToken = token
+          }
+        }
+        longestPx[idx] = Math.max(longestPx[idx], longestToken ? tokenPx(longestToken, cell) : 0)
+        weights[idx] = Math.max(weights[idx], Math.max(Math.min(unitLen(text), 80), Math.min(longest, 120)))
+      }
+    }
+    const total = weights.reduce((a, b) => a + b, 0)
+    if (total <= 0) return
+
+    // 每列保底「均值一半」的百分比，防止极短列仍被压到一字宽；
+    // 另外保底「最长不可断 token」的实测宽度（+ 单元格内边距/边框约 30px），
+    // 与浏览器 auto 布局的 min-content 行为对齐，避免 Woodbury 这类单词被截断
+    const minPct = 50 / colCount
+    const tableW = table.clientWidth || 0
+    const floors = weights.map((_, i) => {
+      const minContentPct = tableW > 0 && measurer
+        ? ((Math.min(longestPx[i], 900) + 30) / tableW) * 100
+        : 0
+      return Math.max(minPct, minContentPct)
+    })
+    let pcts = weights.map((w, i) => Math.max((w / total) * 100, floors[i]))
+    const pctsTotal = pcts.reduce((a, b) => a + b, 0)
+    if (pctsTotal > 100) {
+      // 超预算：只从高于保底的列按盈余比例扣（水位法），保底列不动；
+      // 连保底都放不下时整体等比压缩（此时单词断行不可避免）
+      const surplusTotal = pcts.reduce((a, p, i) => a + Math.max(0, p - floors[i]), 0)
+      const deficit = pctsTotal - 100
+      if (surplusTotal > deficit) {
+        const keep = (surplusTotal - deficit) / surplusTotal
+        pcts = pcts.map((p, i) => floors[i] + Math.max(0, p - floors[i]) * keep)
+      } else {
+        pcts = pcts.map((p) => (p / pctsTotal) * 100)
+      }
+    }
+
+    const colgroup = table.ownerDocument!.createElement('colgroup')
+    pcts.forEach((pct) => {
+      const col = table.ownerDocument!.createElement('col')
+      col.style.width = `${pct.toFixed(2)}%`
+      colgroup.appendChild(col)
+    })
+    table.insertBefore(colgroup, table.firstChild)
+    ;(table as HTMLTableElement).style.tableLayout = 'fixed'
+  })
+}
+
 // ── KaTeX / Mermaid 渲染 ─────────────────────────────────────────────────
 
 /** 把容器内 .math-inline / .math-block[data-formula] 渲染成 KaTeX HTML */
@@ -266,6 +365,7 @@ export async function renderPreviewDom(container: HTMLElement, content: string, 
 
   applyHeadingNumbers(container, settings)
   applyCaptionNumbers(container)
+  balanceTableColumns(container)
 
   // 4. KaTeX + Mermaid（需要 DOM 已存在；等一帧与网页预览行为一致）
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))

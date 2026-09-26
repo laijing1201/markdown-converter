@@ -152,11 +152,13 @@ interface Stage {
   ascRatio: Map<string, number>
 }
 
-function injectStageStyle(contentWpx: number): void {
-  const id = 'pdf-export-stage-style'
-  document.getElementById(id)?.remove()
+/** 并发运行计数：保护共享的测量环境（暗色开关），防止互相破坏 */
+let stageRunCount = 0
+let stageRemovedDark = false
+
+function injectStageStyle(contentWpx: number): HTMLStyleElement {
   const style = document.createElement('style')
-  style.id = id
+  style.id = 'pdf-export-stage-style'
   style.textContent = `
 #${STAGE_ID} {
   position: fixed; left: -20000px; top: 0; z-index: -1;
@@ -179,6 +181,7 @@ function injectStageStyle(contentWpx: number): void {
 }
 `
   document.head.appendChild(style)
+  return style
 }
 
 /** 标题 → 与 Word/预览一致的目录级别；null 表示不进目录 */
@@ -731,33 +734,10 @@ function walkElement(el: Element, ctx: WalkCtx, out: WalkOut): void {
         })
       }
     }
-  } else if (tag === 'code') {
-    const cs = getComputedStyle(el)
-    if (!isTransparent(cs.backgroundColor)) {
-      // 行内 code 可能被断行拆成多个片段：getBoundingClientRect 会给出跨行
-      // union 大矩形（背景条盖住整段），必须按 Range 逐片段取矩形（与浏览器
-      // 逐片段绘制背景的行为一致）。
-      const fill = hexColor(cs.backgroundColor)
-      const range = el.ownerDocument!.createRange()
-      range.selectNodeContents(el)
-      const rects = Array.from(range.getClientRects())
-      const list = rects.length ? rects : [el.getBoundingClientRect()]
-      for (const rect of list) {
-        if (rect.width < 1 || rect.height < 1) continue
-        out.items.push({
-          shape: {
-            t: 'rect',
-            x: rect.left - ctx.stage.stageLeft - 2,
-            y: rect.top - ctx.stage.stageTop,
-            w: rect.width + 4,
-            h: rect.height,
-            fill,
-          },
-          ...rowTag,
-        })
-      }
-    }
   }
+  // 行内 code 的背景不在这里画：processTextNode 已把 bg 附着到文字簇上
+  //（emitCluster 在文字之前绘制）。若在此处再按元素推一个背景矩形，
+  // items 会后于文字绘制，粉色底色会把代码文字整个盖住（只剩色块）。
 
   const prevLink = ctx.linkHref
   if (tag === 'a') ctx.linkHref = (el as HTMLAnchorElement).getAttribute('href') || undefined
@@ -1429,8 +1409,12 @@ export async function runLayout(
 
   // 2. 舞台（导出期间强制亮色，避免暗色主题进入 PDF）
   const prevDark = document.documentElement.classList.contains('dark')
-  if (prevDark) document.documentElement.classList.remove('dark')
-  injectStageStyle(contentWpx)
+  stageRunCount++
+  if (prevDark && stageRunCount === 1 && !stageRemovedDark) {
+    document.documentElement.classList.remove('dark')
+    stageRemovedDark = true
+  }
+  const stageStyleEl = injectStageStyle(contentWpx)
   const stageRoot = document.createElement('div')
   stageRoot.id = STAGE_ID
   document.body.appendChild(stageRoot)
@@ -1601,8 +1585,12 @@ export async function runLayout(
     }
   } finally {
     stageRoot.remove()
-    document.getElementById('pdf-export-stage-style')?.remove()
-    if (prevDark) document.documentElement.classList.add('dark')
+    stageStyleEl.remove()
+    stageRunCount--
+    if (stageRunCount === 0 && stageRemovedDark) {
+      document.documentElement.classList.add('dark')
+      stageRemovedDark = false
+    }
   }
 }
 

@@ -199,5 +199,31 @@ console.log('智能排版安全规则')
   check('图题行保留', extOut.includes('图：结构'))
 }
 
+// ── CJK 邻接加粗（**标签：**后紧跟汉字）──────────────────────────────────────
+console.log('CJK 邻接加粗')
+{
+  // CommonMark flanking 规则：闭合 ** 前是标点、后紧跟汉字时不解析 → 字面 ** 泄漏
+  const html = markdownToSafeHtml('- **位置：**引言贡献第（3）项')
+  check('闭合**紧跟汉字解析为 strong', html.includes('<strong>位置：</strong>'), html)
+  check('无字面 ** 残留', !html.includes('**'), html)
+  check('零宽空格不残留在输出', !html.includes('\u200B'), html)
+
+  const quoted = markdownToSafeHtml('**可能造成的影响：**“优于 CAPU”')
+  check('后跟引号正常加粗（原有行为不回退）', quoted.includes('<strong>可能造成的影响：</strong>'), quoted)
+
+  const en = markdownToSafeHtml('plain **english bold** text')
+  check('英文粗体不受影响', en.includes('<strong>english bold</strong>'), en)
+
+  const openFix = markdownToSafeHtml('中文**“引用内容”**说明')
+  check('CJK 后接标点的开**解析', openFix.includes('<strong>“引用内容”</strong>'), openFix)
+
+  const inCode = markdownToSafeHtml('使用 `**位置：**不要误解析` 的行内代码')
+  check('行内代码内 ** 保持字面', inCode.includes('<code>**位置：**不要误解析</code>'), inCode)
+
+  // `_` 受 CommonMark 词内规则限制（__x__后紧跟汉字不解析，规范行为），只验证常规场景
+  const em = markdownToSafeHtml('- __标签：__ 内容')
+  check('下划线粗体常规场景正常', em.includes('<strong>标签：</strong>'), em)
+}
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`)
 process.exit(fail === 0 ? 0 : 1)

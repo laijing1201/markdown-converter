@@ -26,7 +26,7 @@ import {
 } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
 import { PX_TO_PT, type DocSettings } from '../templates'
-import { subsetUsedFonts, loadFontBytes } from './fonts'
+import { subsetUsedFonts, loadFontBytes, getFontCoverage, ALL_FONT_FILES } from './fonts'
 import { TOC_INDENT_PX, TOC_LINE_PX, TOC_TITLE_PX } from './layout'
 import type { DrawItem, LayoutResult, TextItem } from './types'
 
@@ -57,6 +57,8 @@ interface FontBundle {
   custom: Map<string, PDFFont>
   timesItalic: PDFFont
   helveticaItalic: PDFFont
+  times: PDFFont
+  helvetica: PDFFont
   fallback: PDFFont
 }
 
@@ -100,6 +102,93 @@ export async function renderPdf(
   addChars('sans', settings.headerText)
   addChars('sans', settings.footerText)
 
+  // ── 缺字回退指派 ────────────────────────────────────────────────────────────
+  // Noto Serif/Sans SC 不含的符号（∂ − ⊤ → ★ 等）在子集字体里没有字形，
+  // pdf-lib 会画成 .notdef 空方框。这里把缺字字符指派给第一个覆盖它的字体
+  //（其他嵌入字体 → KaTeX 数学字体 → 标准 WinAnsi 字体），字形进入该字体的
+  // 子集；绘制时按指派逐段换字体。任何字体都不覆盖的字符跳过并提示。
+  const WINANSI_EXTRA = [...'€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ'].map((c) => c.codePointAt(0)!)
+  const winAnsiCovers = (ch: string): boolean => {
+    const cp = ch.codePointAt(0)!
+    return (cp >= 0x20 && cp <= 0x7e) || (cp >= 0xa0 && cp <= 0xff) || WINANSI_EXTRA.includes(cp)
+  }
+  const FALLBACK_KEYS = ['sans', 'serif', 'mono', 'katex:Main', 'katex:AMS']
+  const covKeys = new Set<string>(FALLBACK_KEYS)
+  for (const pageItems of layout.pages) {
+    for (const item of pageItems) {
+      if (item.kind === 'text' && item.fontKey) covKeys.add(item.fontKey)
+    }
+  }
+  const coverage = new Map<string, Set<number>>()
+  await Promise.all(
+    [...covKeys].filter((k) => ALL_FONT_FILES[k]).map(async (k) => {
+      try {
+        coverage.set(k, await getFontCoverage(k))
+      } catch { /* 拿不到覆盖率就当不覆盖，走标准字体兜底 */ }
+    }),
+  )
+  const skippedGlyphs = new Set<string>()
+  interface RunPlan {
+    text: string
+    fontKey?: string
+    stdFace?: 'times' | 'helvetica' | 'timesItalic' | 'helveticaItalic'
+  }
+  const runPlans = new Map<TextItem, RunPlan[]>()
+  for (const pageItems of layout.pages) {
+    for (const item of pageItems) {
+      if (item.kind !== 'text') continue
+      const primaryCov = item.fontKey ? coverage.get(item.fontKey) : undefined
+      const runs: RunPlan[] = []
+      let buf = ''
+      let bufKey: string | undefined
+      let bufStd: RunPlan['stdFace'] | undefined
+      const flush = () => {
+        if (!buf) return
+        runs.push({ text: buf, ...(bufStd ? { stdFace: bufStd } : { fontKey: bufKey }) })
+        buf = ''
+      }
+      for (const ch of item.text) {
+        const cp = ch.codePointAt(0)!
+        let key: string | undefined
+        let stdFace: RunPlan['stdFace'] | undefined
+        if (item.fontKey && primaryCov?.has(cp)) {
+          key = item.fontKey
+        } else {
+          const alt = FALLBACK_KEYS.find((k) => k !== item.fontKey && coverage.get(k)?.has(cp))
+          if (alt) {
+            addChars(alt, ch)
+            key = alt
+          } else if (winAnsiCovers(ch)) {
+            stdFace =
+              item.stdItalic === 'times' ? 'timesItalic'
+              : item.stdItalic === 'helvetica' ? 'helveticaItalic'
+              : item.fontKey?.startsWith('serif')
+                ? 'times'
+                : 'helvetica'
+          } else {
+            skippedGlyphs.add(ch)
+            continue
+          }
+        }
+        if (buf && key === bufKey && stdFace === bufStd) {
+          buf += ch
+        } else {
+          flush()
+          buf = ch
+          bufKey = key
+          bufStd = stdFace
+        }
+      }
+      flush()
+      runPlans.set(item, runs)
+    }
+  }
+  if (skippedGlyphs.size) {
+    const msg = `以下字符在嵌入字体中无字形，PDF 中已跳过：${[...skippedGlyphs].join(' ')}`
+    details.push(msg)
+    if (Array.isArray(layout.notices) && !layout.notices.includes(msg)) layout.notices.push(msg)
+  }
+
   const subsetBytes = await subsetUsedFonts(usedChars, (msg) => details.push(msg))
   const custom = new Map<string, PDFFont>()
   for (const [key, bytes] of subsetBytes) {
@@ -113,6 +202,8 @@ export async function renderPdf(
     custom,
     timesItalic: await pdf.embedFont(StandardFonts.TimesRomanItalic),
     helveticaItalic: await pdf.embedFont(StandardFonts.HelveticaOblique),
+    times: await pdf.embedFont(StandardFonts.TimesRoman),
+    helvetica: await pdf.embedFont(StandardFonts.Helvetica),
     fallback: custom.get('sans') ?? (await pdf.embedFont(StandardFonts.Helvetica)),
   }
   onProgress?.('fonts', 100)
@@ -128,13 +219,6 @@ export async function renderPdf(
     set.add(text)
   }
 
-  const pickFont = (item: TextItem): PDFFont => {
-    const latinOnly = !/[^\x00-\xFF]/.test(item.text)
-    if (item.stdItalic === 'times' && latinOnly) return bundle.timesItalic
-    if (item.stdItalic === 'helvetica' && latinOnly) return bundle.helveticaItalic
-    return bundle.custom.get(item.fontKey) ?? bundle.fallback
-  }
-
   // ── 页面：目录页 + 内容页 ─────────────────────────────────────────────────
   const tocPageCount = layout.tocPageCount
   const totalPages = tocPageCount + layout.pages.length
@@ -147,22 +231,37 @@ export async function renderPdf(
   const toPdfY = (yPx: number): number => pageHpt - contentTopPt - yPx * PX_TO_PT
 
   // ── 绘制原语 ─────────────────────────────────────────────────────────────
+  const fontOfRun = (run: { fontKey?: string; stdFace?: 'times' | 'helvetica' | 'timesItalic' | 'helveticaItalic' }): PDFFont => {
+    if (run.stdFace === 'times') return bundle.times
+    if (run.stdFace === 'helvetica') return bundle.helvetica
+    if (run.stdFace === 'timesItalic') return bundle.timesItalic
+    if (run.stdFace === 'helveticaItalic') return bundle.helveticaItalic
+    return (run.fontKey && bundle.custom.get(run.fontKey)) || bundle.fallback
+  }
+
   const drawTextItem = (page: PDFPage, item: TextItem): void => {
     const text = item.text
     if (!text.trim()) return
-    const font = pickFont(item)
-    recordDrawn(font, text)
     const size = item.size * PX_TO_PT
-    const x = toPdfX(item.x)
     const y = toPdfY(item.y)
     const c = hexToRgb(item.color)
-    try {
-      page.drawText(text, { x, y, size, font, color: rgb(c.r, c.g, c.b) })
-    } catch {
-      // 标准 14 字体编码不下（WinAnsi 外字符）→ 回退嵌入字体
+    const color = rgb(c.r, c.g, c.b)
+    const runs = runPlans.get(item) ?? [{ text, fontKey: item.fontKey }]
+    let xPx = item.x
+    for (const run of runs) {
+      if (!run.text) continue
+      const font = fontOfRun(run)
       try {
-        page.drawText(text, { x, y, size, font: bundle.fallback, color: rgb(c.r, c.g, c.b) })
-      } catch { /* 彻底画不出的字符跳过 */ }
+        recordDrawn(font, run.text)
+        page.drawText(run.text, { x: toPdfX(xPx), y, size, font, color })
+      } catch {
+        // 子集字体编码不下（理论少见：字形已按覆盖率指派）→ 回退兜底字体
+        try {
+          page.drawText(run.text, { x: toPdfX(xPx), y, size, font: bundle.fallback, color })
+        } catch { /* 彻底画不出的字符跳过 */ }
+      }
+      // 段内推进用绘制字体自己的宽度；下一段文本项有自己的实测 x，不累积漂移
+      xPx += font.widthOfTextAtSize(run.text, size) / PX_TO_PT
     }
     if (item.strike || item.underline) {
       const yLine = item.strike ? item.y - item.size * 0.28 : item.y + item.size * 0.16
@@ -170,7 +269,7 @@ export async function renderPdf(
         start: { x: toPdfX(item.x), y: toPdfY(yLine) },
         end: { x: toPdfX(item.x + item.w), y: toPdfY(yLine) },
         thickness: Math.max(0.5, (item.size / 15) * PX_TO_PT),
-        color: rgb(c.r, c.g, c.b),
+        color,
       })
     }
   }
