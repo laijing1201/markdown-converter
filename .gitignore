@@ -1,4 +1,15 @@
-# Logs
+# ── 依赖 ────────────────────────────────────────────────────────────────────
+node_modules
+
+# ── 构建产物（均可由 npm run build:* 重新生成）────────────────────────────────
+dist
+dist-ssr
+dist-electron
+dist-extension
+release
+*.exe
+
+# ── 日志 ────────────────────────────────────────────────────────────────────
 logs
 *.log
 npm-debug.log*
@@ -7,15 +18,27 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-dist-electron
+# ── 本地环境 ────────────────────────────────────────────────────────────────
 *.local
-release
-*.exe
+.env
 
-# Editor directories and files
+# ── 测试产物（PDF baseline 入库，out/ 产物不入库）─────────────────────────────
+tests/pdf/out/
+tests/ext/out/
+tests/ext/browsers/
+scripts/tmp/
+
+# ── 运行时 / 构建期缓存 ──────────────────────────────────────────────────────
+.fontcache/
+extension/src/lib/vendor/wawoff2-decompress.js
+
+# ── 发布打包产物（npm run package:extension 重新生成）─────────────────────────
+artifacts/
+
+# ── GUI 测试截图（本地调试产物）──────────────────────────────────────────────
+gui-test-screenshots/
+
+# ── 编辑器 / 系统 ───────────────────────────────────────────────────────────
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -25,24 +48,3 @@ release
 *.njsproj
 *.sln
 *.sw?
-
-# PDF 测试产物（渲染 PNG / 下载的 PDF 不入库，baseline 入库）
-tests/pdf/out/
-
-# 浏览器扩展构建产物与 E2E 产物（证书/下载/配置文件不入库）
-dist-extension/
-tests/ext/out/
-
-# Chrome for Testing（E2E 本地下载，不入库）
-tests/ext/browsers/
-
-# P4C: extension build
-dist-extension/
-.fontcache/
-extension/src/lib/vendor/wawoff2-decompress.js
-artifacts/
-tests/ext/out/
-tests/pdf/out/
-
-# GUI 测试截图（本地调试产物，不入库）
-gui-test-screenshots/

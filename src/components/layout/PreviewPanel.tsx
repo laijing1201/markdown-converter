@@ -54,7 +54,7 @@ export default function PreviewPanel({ content, previewId, settings, a4Mode, onS
         style={styleVars}
         className={`md-preview tpl-${resolveTemplateBase(settings.template).id} ${
           a4Mode ? 'a4-page' : 'p-6'
-        } prose prose-sm max-w-none bg-white transition-colors min-h-full`}
+        } max-w-none bg-white transition-colors min-h-full`}
       />
     </div>
   )

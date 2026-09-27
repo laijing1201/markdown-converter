@@ -1,8 +1,10 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron'
-import { execSync } from 'node:child_process'
+import { execSync, execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 
@@ -29,6 +31,22 @@ function resolveCommit(): string {
       .trim()
   } catch {
     return ''
+  }
+}
+
+/**
+ * 构建后把 dist/fonts 内的 TTF 压缩为 WOFF 并移除 TTF：
+ * 网页 / Electron 与扩展共用同一字体管线（__WOFF_FONTS__ 运行时解回 TTF），
+ * 部署体积 51.5MB → 约 29MB。dev 模式不触发，回退 public/fonts 的 TTF。
+ */
+function webFontsToWoff(): Plugin {
+  return {
+    name: 'markdoc-web-fonts-woff',
+    apply: 'build',
+    closeBundle() {
+      const script = resolve(dirname(fileURLToPath(import.meta.url)), 'scripts/compress-web-fonts.mjs')
+      execFileSync(process.execPath, [script], { stdio: 'inherit', cwd: process.cwd() })
+    },
   }
 }
 
@@ -65,8 +83,10 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_COMMIT__: JSON.stringify(resolveCommit()),
-    // 网页版 / Electron 直接加载 TTF 字体；WOFF 仅用于浏览器扩展包
-    __EXT_COMPRESSED_FONTS__: 'false',
+    // 网页 / Electron / 扩展三端统一 WOFF 字体管线：
+    // 构建期 TTF→WOFF（scripts/lib/ttf-to-woff.mjs），运行时解回 TTF
+    // （extension/src/lib/woff.js，浏览器原生 DecompressionStream，零依赖）
+    __WOFF_FONTS__: 'true',
   },
-  plugins,
+  plugins: [...plugins, webFontsToWoff()],
 })

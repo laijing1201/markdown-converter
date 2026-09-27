@@ -256,6 +256,15 @@ const CASE_I = `# 整篇一致性检查报告
 表格核查未发现需要列入问题清单的主要汇总数值矛盾：**引用键完整不等于文献内容均支持相应论断**。
 `
 
+// 甲方验收样张（2026-09-27 导出质量事故整改）：覆盖全部污染形态 ——
+//   1. \(...\)/\[...\] 定界符公式（含 KaTeX 三重复制污染）
+//   2. ===== Page N ===== PDF 提取分页标记
+//   3. \*\*转义加粗\*\* 与 **标签：**后紧跟英文
+//   4. 整段 HTML 表格 + 段内转义 HTML 表格
+//   5. GFM 表格单元格内公式
+// 验收标准：导出正文无源码残留、无 Page 标记、公式可编辑、表格为原生表格。
+const CASE_J = readFileSync(join(ROOT, 'tests/fixtures/caseJ-acceptance.md'), 'utf8')
+
 const CASES = [
   ['caseA-basic', CASE_A, {}],
   ['caseB-math-heavy', CASE_B, {}],
@@ -266,6 +275,7 @@ const CASES = [
   ['caseG-pagebreak', CASE_G, {}],
   ['caseH-long-doc', CASE_H, {}],
   ['caseI-review-report', CASE_I, {}],
+  ['caseJ-acceptance', CASE_J, {}],
 ]
 
 // ── 主流程 ───────────────────────────────────────────────────────────────────

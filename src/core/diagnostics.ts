@@ -12,6 +12,7 @@
 import { APP_VERSION, BUILD_COMMIT } from '../version'
 import type { PreflightResult } from './preflight'
 import { getTemplateLabel } from './templates'
+import { exportLogSummary } from './exportLog'
 
 export interface DiagnosticInput {
   templateId: string
@@ -81,6 +82,8 @@ export function buildDiagnostics(input: DiagnosticInput): string {
   }
   lines.push(`导出前检查: 错误 ${errors} · 警告 ${warns}${warnTypes.length ? `（${warnTypes.join('、')}）` : ''}`)
   lines.push(`最近一次导出: ${input.lastExport === 'ok' ? '成功' : input.lastExport === 'fail' ? '失败' : '未导出'}`)
+  // 导出日志（失败/格式异常可追溯，供管理员排查）
+  lines.push(...exportLogSummary())
 
   return lines.join('\n')
 }

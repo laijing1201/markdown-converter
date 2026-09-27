@@ -29,6 +29,9 @@ Markdown 是底层技术，不是使用门槛：普通用户不需要懂 Markdow
 ## ✨ 核心特性
 
 - 🤖 **AI 内容容错**：粘贴时自动修复 AI 输出中最常见的格式破损（未闭合的代码块/公式/粗体、表格缺列、`#` 后缺空格），并提示"已自动修复 N 处"
+- 🔗 **AI 对话链接导入**：粘贴 DeepSeek / ChatGPT / Kimi / 豆包 / 腾讯元宝 / 文心一言 / 通义千问的对话分享链接（支持多链接合并），自动抓取并按 用户/AI 角色还原为 Markdown；抓取经服务端代理一次性转发、不存储
+- 📦 **批量转换**：一次选择多个 .md 文件，统一套用当前模板逐个转 Word 并打包 ZIP 下载，逐文件进度与质量汇总
+- 🧾 **导出质量自检报告**：Word 导出后即时展示 公式 N 个（成功 M 个，失败项附源码行号）、表格、Mermaid 图、警告与耗时
 - 🧮 **双公式管线**：Word 用 LaTeX → MathML → OMML 原生可编辑公式；PDF 用 KaTeX 矢量渲染（字形 + SVG 路径），缩放打印都清晰
 - 📕 **真文本 PDF**：字体子集嵌入（思源宋体/黑体），文字可选中/搜索/复制；真实分页引擎（keep-with-next、孤行寡行控制、表格跨页表头重复、`<!-- pagebreak -->`）；目录页码可点击跳转；页眉/页脚/页码
 - 📋 **导出前质量检查**：按导出目标（Word/PDF）分别检查公式语法、超宽表格、超大图片、字体替代等，避免下载后才发现问题
@@ -36,7 +39,7 @@ Markdown 是底层技术，不是使用门槛：普通用户不需要懂 Markdow
 - 📄 **目录与页码**：Word 自动目录（打开时更新域）+ PDF 静态目录；页码位置可选、首页可隐藏；页眉/页脚文字 Word/PDF 共用
 - 👁 **最终效果**：导出前按打印分页逐页预览（真实分页、页眉页脚、页码），提前看到「第 3 页是什么样」；编辑区底部状态条实时显示 字数/公式/表格/图片/预计页数 与文档健康度
 - 📝 **实时编辑与预览**：CodeMirror 编辑器 + A4 纸张视图预览，滚动同步
-- 📊 **Mermaid 图表**：流程图、时序图、甘特图等，PDF 中以 3× 分辨率渲染
+- 📊 **Mermaid 图表**：流程图、时序图、甘特图等，PDF 中以 3× 分辨率渲染；Word 中 3× 截图嵌入，渲染失败时明确提示并保留原始代码
 - 🖼 **图片支持**：Ctrl+V 粘贴截图、拖拽图片、Markdown 图片语法、Base64；PDF 提供图片质量档（高/标准/压缩）
 - 📂 **文件导入**：拖入或选择 `.md` / `.txt` 文件（桌面版使用系统文件选择器，可直接保存 `.md`）
 - 📋 **富文本复制**：复制渲染结果，直接粘贴进 Word 保留排版
@@ -72,10 +75,10 @@ Markdown 是底层技术，不是使用门槛：普通用户不需要懂 Markdow
 | PDF 生成 | pdf-lib + @pdf-lib/fontkit（真文本 PDF） |
 | PDF 分页引擎 | 浏览器实测 + 自研分页（`src/core/pdf/layout.ts`） |
 | PDF 字体子集 | harfbuzzjs（hb-subset.wasm） |
-| PDF 字体加载 | 按需 fetch + Cache API 跨会话缓存（首屏零字体流量） |
+| PDF 字体加载 | 构建期 TTF→WOFF 压缩（三端统一），运行时按需 fetch + Cache API 跨会话缓存（首屏零字体流量，部署体积约省 45%） |
 | Mermaid/图片（PDF） | SVG → Canvas 3× 光栅嵌入 |
 | 流程图 | Mermaid |
-| 代码高亮 | highlight.js |
+| 代码高亮 | highlight.js（common 常用语言子集，未收录语言降级为转义纯文本） |
 | 编辑器 | @uiw/react-codemirror |
 | XSS 过滤 | DOMPurify |
 
@@ -90,6 +93,29 @@ npm run build          # Web 生产构建（GitHub Pages 部署用），产物�
 npm run build:electron # 桌面版构建 + electron-builder 打包
 npm test               # 全部单元测试（markdown / OMML / docx / PDF 管线 / Adapter / 扩展管线）
 npm run test:web:e2e   # Web E2E（真实浏览器，含 GitHub Pages 生产 base 模拟）
+npm run test:pdf:e2e   # PDF 导出 E2E（真实浏览器逐场景导出）
+npm run test:pdf:visual # PDF 视觉回归（与 tests/pdf/baseline 逐像素对比）
+```
+
+### 项目结构
+
+```text
+src/
+  core/               # MarkDoc Core：与平台无关的全部业务（三端共用）
+    markdown.ts       #   Markdown 管线（marked + 数学占位 + CJK 强调修复）
+    exporter.ts       #   DOCX 导出（buildDocxBlob，三端唯一实现）
+    omml.ts           #   LaTeX → MathML → OMML 原生公式
+    templates.ts      #   模板 / DocSettings 单一数据源
+    aiWordFix.ts      #   AI 深度修复 + 一键导出
+    pdf/              #   真文本 PDF：layout（分页引擎）/ render / fonts / export
+  components/         # React UI（编辑器 / 预览 / 工具栏 / 弹窗）
+  platform/           # 平台差异层（Web 下载 vs Electron 另存为）
+  styles/             # preview.css：三端共用的唯一排版样式
+extension/            # 浏览器扩展：adapters / 提取 / UI / 导出引擎页
+electron/             # Electron 主进程 / preload（contextBridge 白名单）
+scripts/              # 测试与构建脚本（test-*.ts / lib/ 共用库）
+tests/                # PDF 视觉 baseline（入库）+ fixtures
+docs/                 # 专项文档（账号体系 / 导出支持 / 扩展发布等）
 ```
 
 ### GitHub Pages 部署
@@ -109,11 +135,13 @@ npm run test:web:e2e   # Web E2E（真实浏览器，含 GitHub Pages 生产 bas
 ```bash
 npm run icons:ext        # 首次：生成扩展图标（仅图标变更时需要）
 npm run build:extension  # 构建扩展 → dist-extension/
+npm run package:extension # 打包发布 zip → artifacts/
 ```
 
 - 网页版与扩展共用 `src/core/*` 全部核心（Markdown 解析、DOCX/PDF 渲染、OMML 公式、模板、preflight、filename、DOMPurify 清洗），**没有第二套导出实现**
 - `extension/` 只包含平台适配层（Adapter / 提取 / UI / 桥接）与导出引擎页
 - Vite（`vite.extension.config.ts`）构建 popup 与 exporter 页面；esbuild 打包 background / content / bridge（MV3 单文件 IIFE）
+- 字体与网站同一条 WOFF 管线（构建期 `scripts/lib/ttf-to-woff.mjs` 压缩 + roundtrip 校验，运行时 `extension/src/lib/woff.js` 解码）
 
 ### Chrome / Edge 加载方式（开发者模式）
 

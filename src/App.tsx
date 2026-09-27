@@ -11,6 +11,8 @@ import PreExportModal from './components/modals/PreExportModal'
 import ExportProgressModal from './components/modals/ExportProgressModal'
 import PdfPreviewModal from './components/modals/PdfPreviewModal'
 import AuthModal, { type AuthModalMode } from './components/modals/AuthModal'
+import ImportLinkModal from './components/modals/ImportLinkModal'
+import BatchExportModal from './components/modals/BatchExportModal'
 import {
   accountEnabled,
   onAuthChange,
@@ -27,8 +29,43 @@ import { repairAiMarkdown, type RepairFix } from './core/repair'
 import { runPreflight, type PreflightResult } from './core/preflight'
 import { saveToHistory, consumeHistoryError, type HistoryEntry } from './core/history'
 import { buildExportFilename } from './core/filename'
-import { exportToDocx } from './core/exporter'
-import { exportToPdf, buildPdf, PdfExportCancelledError, PdfExportError, type PdfExportResult } from './core/pdf/export'
+import { extractFormulas } from './core/markdown'
+import ExportReportModal, { type ExportQualityReport } from './components/modals/ExportReportModal'
+
+/** 导出日志用的源文本残留预警（只报类型，不携带内容） */
+function sourceWarnings(md: string): string[] {
+  const w: string[] = []
+  if (/^[ \t]*[=]{3,}[ \t]*page[ \t]+\d+[ \t]*[=]{3,}[ \t]*$/gim.test(md)) w.push('源文本含 PDF 分页标记')
+  if (/\\\*\\\*[^*\n]{1,300}\\\*\\\*/.test(md)) w.push('源文本含转义加粗标记')
+  if (/&lt;(table|tr|td)[\s&gt;]/i.test(md)) w.push('源文本含转义 HTML 表格')
+  return w
+}
+
+/**
+ * 把导出降级的公式对照回源 Markdown 行号（自检报告「第 N 行」的来源）。
+ * 匹配按「去空白后相等 → 互相包含」两级进行，命中即从候选池移除，
+ * 保证重复公式各归各的行。
+ */
+function matchFormulaLines(
+  degraded: string[],
+  md: string,
+): { formula: string; line?: number }[] {
+  const pool = extractFormulas(md).map((f) => ({
+    line: f.line,
+    norm: f.formula.replace(/\s+/g, ''),
+  }))
+  return degraded.map((formula) => {
+    const norm = formula.replace(/\s+/g, '')
+    const idx = pool.findIndex((f) => f.norm === norm)
+    const hit = idx >= 0 ? idx : pool.findIndex((f) => f.norm.includes(norm) || norm.includes(f.norm))
+    if (hit < 0) return { formula }
+    const line = pool[hit].line
+    pool.splice(hit, 1)
+    return { formula, line }
+  })
+}
+// 导出链路按需加载：docx / pdf-lib / 字体子集化体积大且只有导出时用到，
+// 动态导入使其不进首屏 chunk（首次导出会有一次性的模块加载，可忽略）
 import {
   loadDocSettings,
   saveDocSettings,
@@ -146,6 +183,9 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [exportProgress, setExportProgress] = useState<{ pct: number; label: string } | null>(null)
   const [showPdfPreview, setShowPdfPreview] = useState(false)
+  const [exportReport, setExportReport] = useState<ExportQualityReport | null>(null)
+  const [showImportLink, setShowImportLink] = useState(false)
+  const [showBatchExport, setShowBatchExport] = useState(false)
   const exportCancelRef = useRef(false)
   const [toast, setToast] = useState<ToastState | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -429,14 +469,43 @@ export default function App() {
     const previewEl = document.getElementById(previewId)
     if (!previewEl || !markdownContent.trim()) return
     setBusy(true)
+    const startedAt = Date.now()
     try {
       const name = buildExportFilename(markdownContent, settings.documentTitle)
+      const { exportToDocx, getLastDocxExportStats } = await import('./core/exporter')
       await exportToDocx(previewEl.innerHTML, name, { settings })
       lastExportRef.current = 'ok'
+      const stats = getLastDocxExportStats()
+      const { recordExportEvent } = await import('./core/exportLog')
+      recordExportEvent({
+        ts: new Date().toISOString(), format: 'docx', outcome: 'ok',
+        durationMs: Date.now() - startedAt, ...stats ?? {},
+        warnings: sourceWarnings(markdownContent),
+      })
+      if (stats) {
+        // 质量自检报告：逐条列出转原生公式失败的公式（含源码行号）
+        setExportReport({
+          durationMs: Date.now() - startedAt,
+          mathTotal: stats.mathTotal,
+          mathOmml: stats.mathOmml,
+          degraded: matchFormulaLines(stats.degradedFormulas, markdownContent),
+          tables: stats.tables,
+          tablesFromEmbeddedText: stats.tablesFromEmbeddedText,
+          mermaidTotal: stats.mermaidTotal,
+          mermaidCaptured: stats.mermaidCaptured,
+          warnings: sourceWarnings(markdownContent),
+        })
+      }
       showToast('✅', 'Word 导出成功，公式可在 Word 中直接编辑')
     } catch (err) {
       lastExportRef.current = 'fail'
       console.error('DOCX export failed:', err)
+      const { recordExportEvent } = await import('./core/exportLog')
+      recordExportEvent({
+        ts: new Date().toISOString(), format: 'docx', outcome: 'fail',
+        durationMs: Date.now() - startedAt,
+        error: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+      })
       showToast('⚠️', 'DOCX 导出失败，请重试')
     } finally {
       setBusy(false)
@@ -447,33 +516,53 @@ export default function App() {
     const previewEl = document.getElementById(previewId)
     if (!previewEl || !markdownContent.trim()) return
     setBusy(true)
+    const startedAt = Date.now()
     exportCancelRef.current = false
     setExportProgress({ pct: 0, label: '正在准备…' })
     try {
       const name = buildExportFilename(markdownContent, settings.documentTitle)
-      const result = await exportToPdf(previewEl, settings, name, {
+      const pdfMod = await import('./core/pdf/export')
+      const result = await pdfMod.exportToPdf(previewEl, settings, name, {
         checkCancel: () => exportCancelRef.current,
         onProgress: (pct, label) => setExportProgress({ pct, label }),
       })
       lastExportRef.current = 'ok'
       const pages = result.pages
       const secs = (result.durationMs / 1000).toFixed(1)
+      const { recordExportEvent } = await import('./core/exportLog')
+      recordExportEvent({
+        ts: new Date().toISOString(), format: 'pdf', outcome: 'ok',
+        durationMs: result.durationMs, pages,
+        warnings: [...(result.notices?.length ? ['渲染提示: ' + result.notices[0]] : []), ...sourceWarnings(markdownContent)],
+      })
       showToast(
         '✅',
         `PDF 导出成功（${pages} 页 · ${secs}s）`,
         result.notices.length > 0 ? result.notices.slice(0, 4) : undefined,
       )
     } catch (err) {
-      if (err instanceof PdfExportCancelledError) {
+      if (err instanceof Error && err.name === 'PdfExportCancelledError') {
         showToast('ℹ️', '已取消 PDF 导出')
-      } else if (err instanceof PdfExportError) {
+      } else if (err instanceof Error && err.name === 'PdfExportError') {
+        const details = (err as Error & { details?: string[] }).details ?? []
         lastExportRef.current = 'fail'
-        console.error('PDF export failed:', err, err.details)
-        showToast('⚠️', err.message, err.details.slice(0, 3), err.details.join('\n'))
+        console.error('PDF export failed:', err, details)
+        const { recordExportEvent } = await import('./core/exportLog')
+        recordExportEvent({
+          ts: new Date().toISOString(), format: 'pdf', outcome: 'fail',
+          durationMs: Date.now() - startedAt,
+          error: [err.message, ...details.slice(0, 3)].join(' | '),
+        })
+        showToast('⚠️', err.message, details.slice(0, 3), details.join('\n'))
       } else {
         lastExportRef.current = 'fail'
         console.error('PDF export failed:', err)
         const details = err instanceof Error ? err.message : String(err)
+        const { recordExportEvent } = await import('./core/exportLog')
+        recordExportEvent({
+          ts: new Date().toISOString(), format: 'pdf', outcome: 'fail',
+          durationMs: Date.now() - startedAt, error: details,
+        })
         showToast('⚠️', 'PDF 导出失败，请重试', undefined, details)
       }
     } finally {
@@ -583,6 +672,14 @@ export default function App() {
     setMarkdownContent(entry.content)
     setShowHistory(false)
     showToast('🕘', '已恢复历史文档')
+  }, [showToast])
+
+  /** AI 对话链接导入：已有内容时以分隔线追加，避免覆盖用户正在编辑的内容 */
+  const handleImportLinkApply = useCallback((markdown: string, messageCount: number) => {
+    setMarkdownContent(prev => (prev.trim() ? `${prev.trimEnd()}\n\n---\n\n${markdown}` : markdown))
+    setShowImportLink(false)
+    setMobileTab('editor')
+    showToast('🔗', `已导入 ${messageCount} 条对话消息，可在左侧继续编辑后导出`)
   }, [showToast])
 
   const templateLabel = getTemplateLabel(settings.template, customTemplates)
@@ -715,6 +812,8 @@ export default function App() {
         onRepairFormat={handleRepairFormat}
         onOpenSettings={() => setShowSettings(true)}
         onOpenHistory={() => setShowHistory(true)}
+        onImportLink={() => setShowImportLink(true)}
+        onBatchExport={() => setShowBatchExport(true)}
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode(v => !v)}
         scrollSyncEnabled={scrollSyncEnabled}
@@ -787,6 +886,29 @@ export default function App() {
         <HistoryModal
           onRestore={handleRestoreHistory}
           onClose={() => setShowHistory(false)}
+        />
+      )}
+
+      {showImportLink && (
+        <ImportLinkModal
+          onApply={handleImportLinkApply}
+          onClose={() => setShowImportLink(false)}
+        />
+      )}
+
+      {showBatchExport && (
+        <BatchExportModal
+          settings={settings}
+          templateLabel={templateLabel}
+          onToast={showToast}
+          onClose={() => setShowBatchExport(false)}
+        />
+      )}
+
+      {exportReport && (
+        <ExportReportModal
+          report={exportReport}
+          onClose={() => setExportReport(null)}
         />
       )}
 

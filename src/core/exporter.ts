@@ -21,6 +21,7 @@ import {
   PageBreak,
   PageOrientation,
   ShadingType,
+  VerticalMergeType,
 } from 'docx'
 import { latexToOmml } from './omml'
 import {
@@ -33,6 +34,30 @@ import {
 
 export interface ExportOptions {
   settings: DocSettings
+  /**
+   * 「实时预览」容器（公式/Mermaid 截图按它与克隆 DOM 配对）。
+   * 缺省取页面上的 #preview-container；批量导出等离屏管线需要显式传入。
+   */
+  sourceEl?: HTMLElement | null
+}
+
+/** 导出质量统计（导出日志 + 导出后「质量自检报告」共用，见 core/exportLog） */
+export interface DocxExportStats {
+  mathTotal: number
+  mathOmml: number
+  mathDegraded: number
+  /** 转 OMML 失败、被降级处理的公式原文（自检报告逐条列出，可对照行号） */
+  degradedFormulas: string[]
+  tables: number
+  tablesFromEmbeddedText: number
+  /** Mermaid 图：预览中成功渲染的总数 / 导出时成功截图嵌入的数量 */
+  mermaidTotal: number
+  mermaidCaptured: number
+}
+let lastDocxStats: DocxExportStats | null = null
+/** 最近一次 buildDocxBlob 的质量统计（导出完成后读取） */
+export function getLastDocxExportStats(): DocxExportStats | null {
+  return lastDocxStats
 }
 
 // PDF 导出已迁移到 src/core/pdf/*（真正的文本 PDF，见 pdf/export.ts）
@@ -77,8 +102,12 @@ export async function buildDocxBlob(innerHtml: string, options: ExportOptions): 
 
   const cfg = resolveTemplateBase(settings.template)
   const ctx: ExportContext = { cfg, settings, mathMap: new WeakMap() }
+  lastDocxStats = {
+    mathTotal: 0, mathOmml: 0, mathDegraded: 0, degradedFormulas: [],
+    tables: 0, tablesFromEmbeddedText: 0, mermaidTotal: 0, mermaidCaptured: 0,
+  }
 
-  await prepareAssets(root, ctx)
+  await prepareAssets(root, ctx, options.sourceEl ?? null)
 
   // 2. Convert DOM to docx elements
   const state: ParseState = { h1Count: 0, isReferenceSection: false, figCount: 0, tblCount: 0, quoteDepth: 0 }
@@ -199,8 +228,8 @@ export async function exportToDocx(innerHtml: string, filename: string, options:
  *    由解析阶段降级为占位文本。
  * 4. 所有缺少尺寸信息的图片测量并写入宽高，避免导出后变形。
  */
-async function prepareAssets(root: HTMLElement, ctx: ExportContext) {
-  const liveContainer = document.getElementById(PREVIEW_ID)
+async function prepareAssets(root: HTMLElement, ctx: ExportContext, sourceEl: HTMLElement | null) {
+  const liveContainer = sourceEl ?? document.getElementById(PREVIEW_ID)
 
   // ── 公式与 Mermaid：克隆/实时 DOM 按"同一 innerHTML 快照"按下标配对 ──
   const cloneEls = Array.from(root.querySelectorAll<HTMLElement>(CAPTURE_SELECTOR))
@@ -226,24 +255,43 @@ async function prepareAssets(root: HTMLElement, ctx: ExportContext) {
   for (let i = 0; i < cloneEls.length; i++) {
     const cloneEl = cloneEls[i]
     if (cloneEl.classList.contains('mermaid-rendered')) {
-      if (canPair) tasks.push(captureAsImage(cloneEl, liveEls[i]))
+      if (lastDocxStats) lastDocxStats.mermaidTotal++
+      if (canPair) {
+        // Mermaid 图形本身是位图/矢量图，用 3× 采样保证打印与缩放清晰（与 PDF 管线一致）
+        tasks.push(captureAsImage(cloneEl, liveEls[i], 3).then((ok) => {
+          if (ok) {
+            if (lastDocxStats) lastDocxStats.mermaidCaptured++
+          } else {
+            mermaidFallbackToCode(cloneEl)
+          }
+        }))
+      } else {
+        // 无实时容器（离屏/无头导出）：无法截图，保留图表源码供用户手动处理
+        mermaidFallbackToCode(cloneEl)
+      }
       continue
     }
 
     // math-block / math-inline：先尝试原生 OMML
     const formula = decodeURIComponent(cloneEl.getAttribute('data-formula') || '')
     const displayMode = cloneEl.classList.contains('math-block')
+    if (lastDocxStats) lastDocxStats.mathTotal++
     if (formula) {
       const component = latexToOmml(formula, displayMode)
       if (component) {
         ctx.mathMap.set(cloneEl, component)
+        if (lastDocxStats) lastDocxStats.mathOmml++
         continue
       }
     }
+    if (lastDocxStats) {
+      lastDocxStats.mathDegraded++
+      lastDocxStats.degradedFormulas.push(formula)
+    }
     if (canPair) {
-      tasks.push(captureAsImage(cloneEl, liveEls[i], () => {
+      tasks.push(captureAsImage(cloneEl, liveEls[i], 2).then((ok) => {
         // 截图也失败：退回纯文本，避免解析 .katex 内部结构产生乱码
-        cloneEl.textContent = displayMode ? `$$${formula}$$` : `$${formula}$`
+        if (!ok) cloneEl.textContent = displayMode ? `$$${formula}$$` : `$${formula}$`
       }))
     } else {
       cloneEl.textContent = displayMode ? `$$${formula}$$` : `$${formula}$`
@@ -271,11 +319,26 @@ function isMathEl(el: Element): boolean {
   return el.classList.contains('math-block') || el.classList.contains('math-inline')
 }
 
-async function captureAsImage(cloneEl: HTMLElement, liveEl: HTMLElement, onFail?: () => void) {
+/**
+ * Mermaid 截图失败/无实时容器时的兜底：把渲染占位 div 还原为代码块，
+ * 保证「图表源码绝不丢失、也绝不以 SVG 垃圾形式进入正文」——用户在 Word
+ * 里看到的是可复制的 mermaid 源码，可修好语法后再来导出。
+ */
+function mermaidFallbackToCode(cloneEl: HTMLElement) {
+  const source = cloneEl.getAttribute('data-mermaid-source') || ''
+  const doc = cloneEl.ownerDocument
+  const pre = doc.createElement('pre')
+  const code = doc.createElement('code')
+  code.textContent = source || '（Mermaid 图表源码缺失：渲染失败且未保留原始代码）'
+  pre.appendChild(code)
+  cloneEl.parentNode?.replaceChild(pre, cloneEl)
+}
+
+async function captureAsImage(cloneEl: HTMLElement, liveEl: HTMLElement, scale = 2): Promise<boolean> {
   try {
     const html2canvas = (await import('html2canvas')).default
     const canvas = await html2canvas(liveEl, {
-      scale: 2,
+      scale,
       useCORS: true,
       backgroundColor: '#ffffff',
       logging: false,
@@ -288,9 +351,10 @@ async function captureAsImage(cloneEl: HTMLElement, liveEl: HTMLElement, onFail?
     img.style.width = `${rect.width}px`
     img.style.height = `${rect.height}px`
     cloneEl.parentNode?.replaceChild(img, cloneEl)
+    return true
   } catch (err) {
     console.warn('export: mermaid/math capture failed', err instanceof Error ? err.message : err)
-    onFail?.()
+    return false
   }
 }
 
@@ -409,7 +473,7 @@ function buildStyles(cfg: ReturnType<typeof resolveTemplateBase>, s: DocSettings
     id: 'Caption', name: 'Caption', basedOn: 'Normal', next: 'Normal', quickFormat: true,
     run: { size: 21, bold: true, font: bodyFontObj(s), color: '404040' },
     paragraph: {
-      spacing: { before: 60, after: 160, line: 240 },
+      spacing: { before: 60, after: 120, line: 240 },
       alignment: AlignmentType.CENTER,
       indent: { firstLine: 0 },
     },
@@ -417,7 +481,7 @@ function buildStyles(cfg: ReturnType<typeof resolveTemplateBase>, s: DocSettings
 
   const listParagraph = {
     id: 'ListParagraph', name: 'List Paragraph', basedOn: 'Normal', quickFormat: true,
-    paragraph: { spacing: { before: 100, after: 100 }, indent: { firstLine: 0 } },
+    paragraph: { spacing: { before: 20, after: 40 }, indent: { firstLine: 0 } },
   }
 
   if (cfg.academicHeuristics) {
@@ -444,10 +508,10 @@ function buildStyles(cfg: ReturnType<typeof resolveTemplateBase>, s: DocSettings
           run: { size: 28, font: { ascii: 'KaiTi', hAnsi: 'KaiTi', eastAsia: 'KaiTi' }, color: '000000' },
           paragraph: { spacing: { before: 120, after: 240 }, alignment: AlignmentType.CENTER, indent: { firstLine: 0 } },
         },
-        heading('Heading1', 'Heading 1', cfg.h2Size, cfg.h2Color, { before: 240, after: 240 }, true),
-        heading('Heading2', 'Heading 2', cfg.h3Size, cfg.h2Color, { before: 200, after: 120 }),
-        heading('Heading3', 'Heading 3', cfg.h4Size, cfg.h2Color, { before: 160, after: 120 }),
-        heading('Heading4', 'Heading 4', cfg.h4Size, cfg.h2Color, { before: 120, after: 120 }),
+        heading('Heading1', 'Heading 1', cfg.h2Size, cfg.h2Color, { before: 200, after: 120 }, true),
+        heading('Heading2', 'Heading 2', cfg.h3Size, cfg.h2Color, { before: 160, after: 80 }),
+        heading('Heading3', 'Heading 3', cfg.h4Size, cfg.h2Color, { before: 140, after: 80 }),
+        heading('Heading4', 'Heading 4', cfg.h4Size, cfg.h2Color, { before: 100, after: 60 }),
         {
           id: 'AbstractContent', name: 'Abstract Content', basedOn: 'Normal', next: 'Normal', quickFormat: true,
           run: { size: s.bodySize, font: { ascii: 'KaiTi', hAnsi: 'KaiTi', eastAsia: 'KaiTi' }, color: '000000' },
@@ -486,10 +550,10 @@ function buildStyles(cfg: ReturnType<typeof resolveTemplateBase>, s: DocSettings
       },
     },
     paragraphStyles: [
-      heading('Heading1', 'Heading 1', cfg.h1Size, cfg.h1Color, { before: 280, after: 160 }),
-      heading('Heading2', 'Heading 2', cfg.h2Size, cfg.h2Color, { before: 240, after: 120 }),
-      heading('Heading3', 'Heading 3', cfg.h3Size, cfg.h2Color, { before: 180, after: 100 }),
-      heading('Heading4', 'Heading 4', cfg.h4Size, cfg.h2Color, { before: 140, after: 80 }),
+      heading('Heading1', 'Heading 1', cfg.h1Size, cfg.h1Color, { before: 240, after: 120 }),
+      heading('Heading2', 'Heading 2', cfg.h2Size, cfg.h2Color, { before: 200, after: 80 }),
+      heading('Heading3', 'Heading 3', cfg.h3Size, cfg.h2Color, { before: 160, after: 80 }),
+      heading('Heading4', 'Heading 4', cfg.h4Size, cfg.h2Color, { before: 120, after: 60 }),
       caption,
       listParagraph,
     ],
@@ -510,7 +574,7 @@ function stripHeadingNumber(el: HTMLElement): HTMLElement {
 function quoteParagraphOptions(state: ParseState, extra: Record<string, unknown> = {}) {
   const depth = Math.max(1, state.quoteDepth)
   return {
-    spacing: { before: 200, after: 200 },
+    spacing: { before: 120, after: 120 },
     indent: { left: 480 * depth, firstLine: 0 },
     border: { left: { style: BorderStyle.SINGLE, size: 24, color: 'D1D5DB', space: 10 } },
     ...extra,
@@ -572,7 +636,15 @@ function parseBlockNodes(container: HTMLElement, ctx: ExportContext, state: Pars
         }
       } else if (tagName === 'p') {
         const textContent = el.textContent?.trim() || ''
-        if (academic && state.isReferenceSection) {
+        const embeddedTable = tryParseEmbeddedHtmlTable(el, cfg.tableStyle, ctx)
+        if (embeddedTable) {
+          blocks.push(embeddedTable)
+          if (lastDocxStats) {
+            lastDocxStats.tables++
+            lastDocxStats.tablesFromEmbeddedText++
+          }
+          blocks.push(new Paragraph({ text: '' }))
+        } else if (academic && state.isReferenceSection) {
           blocks.push(new Paragraph({ children: parseInlineNodes(el, {}, ctx), style: 'ReferenceItem' }))
         } else if (
           academic &&
@@ -641,7 +713,8 @@ function parseBlockNodes(container: HTMLElement, ctx: ExportContext, state: Pars
           }
         }))
       } else if (tagName === 'table') {
-        blocks.push(parseTableNode(el, cfg.tableStyle))
+        blocks.push(parseTableNode(el, cfg.tableStyle, ctx))
+        if (lastDocxStats) lastDocxStats.tables++
         blocks.push(new Paragraph({ text: "" }))
       } else if (tagName === 'hr') {
         blocks.push(new Paragraph({
@@ -726,9 +799,13 @@ function parseListNodes(
   Array.from(listEl.children).forEach(li => {
     if (li.tagName.toLowerCase() !== 'li') return
 
-    // li 的直接内容与嵌套列表分开处理，嵌套列表递归并提升层级
+    // li 的直接内容与嵌套列表分开处理，嵌套列表递归并提升层级。
+    // 注意：cloneNode 会生成新对象，mathMap（WeakMap 按对象身份）必须重新绑定，
+    // 否则列表项里的公式永远命中不了 OMML，退化为 KaTeX 内部文本。
     const inlineWrap = li.ownerDocument.createElement('span')
     const nestedLists: HTMLElement[] = []
+    const liMathEls = Array.from(li.querySelectorAll<HTMLElement>('.math-inline, .math-block'))
+    const liMathComps = liMathEls.map(el => ctx.mathMap.get(el) ?? null)
     Array.from(li.childNodes).forEach(n => {
       if (n.nodeType === Node.ELEMENT_NODE && /^(ul|ol)$/i.test((n as HTMLElement).tagName)) {
         nestedLists.push(n as HTMLElement)
@@ -736,21 +813,27 @@ function parseListNodes(
         inlineWrap.appendChild(n.cloneNode(true))
       }
     })
+    Array.from(inlineWrap.querySelectorAll<HTMLElement>('.math-inline, .math-block')).forEach((el, idx) => {
+      const comp = liMathComps[idx]
+      if (comp) ctx.mathMap.set(el, comp)
+    })
 
     const children = parseInlineNodes(inlineWrap, {}, ctx)
     if (!children.length) children.push(new TextRun(''))
 
     if (taskList) {
-      // 任务列表：☑/☐ 由内联 input 转换而来，不再叠加圆点
+      // 任务列表：☑/☐ 由内联 input 转换而来，不再叠加圆点（无 bullet/numbering，
+      // docx 库不会自动加 ListParagraph，这里需要显式指定样式）
       blocks.push(new Paragraph({
         children,
         style: 'ListParagraph',
         indent: { left: 720 + level * 720, firstLine: 0 },
       }))
     } else {
+      // 有 bullet/numbering 时 docx 库会自动写入 ListParagraph pStyle，
+      // 再显式传 style 会产生重复的 <w:pStyle>（不符合 OOXML schema）
       blocks.push(new Paragraph({
         children,
-        style: 'ListParagraph',
         ...(ordered
           ? { numbering: { reference: 'markdoc-ordered', level: Math.min(level, 4) } }
           : { bullet: { level } }),
@@ -819,6 +902,17 @@ function parseInlineNodes(container: HTMLElement, currentStyle: any = {}, ctx?: 
         return
       }
 
+      // 兜底：公式元素没有命中 OMML 映射（转换失败/截图失败/映射丢失）时，
+      // 绝不能把 KaTeX 内部 DOM 当普通内联内容展开（会输出三份乱码文本），
+      // 降级为单个 $...$ 文本占位，保证 Word 里可读、可编辑。
+      if (isMathEl(el) && el.getAttribute('data-formula')) {
+        const formula = decodeURIComponent(el.getAttribute('data-formula') || '')
+        if (formula) {
+          runs.push(new TextRun({ text: `$${formula}$`, italics: true, font: currentStyle.font }))
+          return
+        }
+      }
+
       if (tagName === 'strong' || tagName === 'b') {
         runs.push(...parseInlineNodes(el, { ...currentStyle, bold: true }, ctx))
       } else if (tagName === 'em' || tagName === 'i') {
@@ -876,6 +970,30 @@ function parseInlineNodes(container: HTMLElement, currentStyle: any = {}, ctx?: 
 
 const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: 'ffffff' }
 
+/**
+ * 兜底：段落文本整体是一个 <table>…</table> 片段（源 Markdown 里被转义/
+ * 挤进段落的 HTML 表格）时，还原为 Word 原生表格，绝不让 HTML 标签漏进正文。
+ * 预览层已由 markdown.ts 的 hoistEmbeddedHtmlTables 处理，这里覆盖
+ * 直接喂 DOM 快照等旁路入口。
+ */
+function tryParseEmbeddedHtmlTable(
+  el: HTMLElement,
+  tableStyle: TableStyle,
+  ctx?: ExportContext,
+): Table | null {
+  const trimmed = (el.textContent || '').trim()
+  if (!trimmed || !/^<table[\s>]/i.test(trimmed) || !/<\/table>$/i.test(trimmed)) return null
+  if (el.querySelector('table')) return null // 已是真表格节点，走正常解析
+  try {
+    const frag = new DOMParser().parseFromString(trimmed, 'text/html')
+    const tbl = frag.querySelector('table')
+    if (!tbl || !tbl.querySelector('tr')) return null
+    return parseTableNode(tbl as HTMLElement, tableStyle, ctx)
+  } catch {
+    return null
+  }
+}
+
 function cellBorders(tableStyle: TableStyle, position: 'header' | 'body', isLastRow: boolean) {
   if (tableStyle === 'threeline') {
     if (position === 'header') {
@@ -908,40 +1026,86 @@ function cellBorders(tableStyle: TableStyle, position: 'header' | 'body', isLast
   }
 }
 
-function parseTableNode(tableEl: HTMLElement, tableStyle: TableStyle): Table {
-  const rows: TableRow[] = []
+function parseTableNode(tableEl: HTMLElement, tableStyle: TableStyle, ctx?: ExportContext): Table {
   const shading = tableStyle === 'shaded' ? { type: ShadingType.CLEAR, fill: 'EEF2F8', color: 'auto' } : undefined
 
-  const buildCell = (td: HTMLElement, position: 'header' | 'body', isLastRow: boolean) => {
-    const children = parseInlineNodes(td, {}, undefined)
-    return new TableCell({
+  // ── 合并单元格（colspan/rowspan）：按网格游标遍历 ──
+  // colspan → w:gridSpan；rowspan → 首格 w:vMerge restart，后续行同列补
+  // w:vMerge continue 延续格。宽格覆盖到的延续列直接吸收（gridSpan 覆盖）。
+  const clampSpan = (v: string | null) => {
+    const n = parseInt(v || '1', 10)
+    return Number.isFinite(n) ? Math.min(Math.max(n, 1), 200) : 1
+  }
+  const active: number[] = [] // 每列剩余延续行数
+
+  const makeCell = (td: HTMLElement, position: 'header' | 'body', isLastRow: boolean, cs: number, rs: number) =>
+    new TableCell({
       children: [new Paragraph({
-        children,
+        children: parseInlineNodes(td, {}, ctx),
         alignment: position === 'header' ? AlignmentType.CENTER : AlignmentType.LEFT,
         indent: { firstLine: 0 },
       })],
       borders: cellBorders(tableStyle, position, isLastRow),
       ...(position === 'header' && shading ? { shading } : {}),
+      ...(cs > 1 ? { columnSpan: cs } : {}),
+      ...(rs > 1 ? { verticalMerge: VerticalMergeType.RESTART } : {}),
     })
-  }
 
+  const continueCell = (position: 'header' | 'body', isLastRow: boolean) =>
+    new TableCell({
+      children: [new Paragraph({ children: [], indent: { firstLine: 0 } })],
+      borders: cellBorders(tableStyle, position, isLastRow),
+      verticalMerge: VerticalMergeType.CONTINUE,
+    })
+
+  // 收集行序列（thead 在前，thead/tbody 缺失时回退平铺行）
+  const rowInfos: Array<{ tr: HTMLElement; position: 'header' | 'body'; isLast: boolean }> = []
   const thead = tableEl.querySelector('thead')
+  const tbodies = tableEl.querySelectorAll('tbody')
+  const pushRow = (tr: HTMLElement, position: 'header' | 'body', isLast: boolean) =>
+    rowInfos.push({ tr, position, isLast })
   if (thead) {
-    Array.from(thead.querySelectorAll('tr')).forEach(tr => {
-      const cells = Array.from(tr.querySelectorAll('th, td')).map(td => buildCell(td as HTMLElement, 'header', false))
-      rows.push(new TableRow({ children: cells, tableHeader: true }))
+    Array.from(thead.querySelectorAll('tr')).forEach(tr => pushRow(tr, 'header', false))
+  }
+  if (tbodies.length) {
+    Array.from(tbodies).forEach(tbody => {
+      const trs = Array.from(tbody.querySelectorAll('tr'))
+      trs.forEach((tr, i) => pushRow(tr, 'body', i === trs.length - 1))
     })
+  } else {
+    const trs = Array.from(tableEl.querySelectorAll('tr')).filter(tr => !tr.closest('thead'))
+    trs.forEach((tr, i) => pushRow(tr, 'body', i === trs.length - 1))
   }
 
-  const tbody = tableEl.querySelector('tbody')
-  if (tbody) {
-    const trs = Array.from(tbody.querySelectorAll('tr'))
-    trs.forEach((tr, index) => {
-      const isLast = index === trs.length - 1
-      const cells = Array.from(tr.querySelectorAll('th, td')).map(td => buildCell(td as HTMLElement, 'body', isLast))
-      rows.push(new TableRow({ children: cells }))
-    })
-  }
+  const rows: TableRow[] = rowInfos.map(({ tr, position, isLast }) => {
+    const cells: TableCell[] = []
+    let col = 0
+    const tds = Array.from(tr.children).filter(c => /^(td|th)$/i.test(c.tagName)) as HTMLElement[]
+    for (const td of tds) {
+      // 补齐游标扫过的延续格
+      while (active[col] > 0) {
+        cells.push(continueCell(position, isLast))
+        active[col]--
+        col++
+      }
+      const cs = clampSpan(td.getAttribute('colspan'))
+      const rs = clampSpan(td.getAttribute('rowspan'))
+      cells.push(makeCell(td, position, isLast, cs, rs))
+      // 登记未来行的延续 + 吸收宽格覆盖到的延续列
+      for (let c = col; c < col + cs; c++) {
+        active[c] = rs > 1 ? rs - 1 : 0
+      }
+      col += cs
+    }
+    // 行尾仍在生效的延续格
+    for (let c = col; c < active.length; c++) {
+      if (active[c] > 0) {
+        cells.push(continueCell(position, isLast))
+        active[c]--
+      }
+    }
+    return new TableRow({ children: cells, cantSplit: true, ...(position === 'header' ? { tableHeader: true } : {}) })
+  })
 
   const tableBorders = tableStyle === 'threeline'
     ? {

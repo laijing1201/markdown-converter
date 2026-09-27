@@ -17,7 +17,7 @@ export default defineConfig({
   publicDir: 'public',
   define: {
     // 扩展包内字体为 WOFF v1（构建期转换，运行时解压回 TTF；WOFF2 与 MV3 CSP 冲突）
-    __EXT_COMPRESSED_FONTS__: 'true',
+    __WOFF_FONTS__: 'true',
   },
   build: {
     outDir: fileURLToPath(new URL('./dist-extension', import.meta.url)),

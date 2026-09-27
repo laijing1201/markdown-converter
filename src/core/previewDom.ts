@@ -326,6 +326,8 @@ export async function renderMermaidIn(container: HTMLElement): Promise<void> {
         const wrapper = document.createElement('div')
         wrapper.className = 'mermaid-rendered my-6 flex justify-center'
         wrapper.innerHTML = svg
+        // 记录图表源码：导出截图失败时据此还原为代码块（见 exporter.mermaidFallbackToCode）
+        wrapper.setAttribute('data-mermaid-source', diagramText)
         pre.parentNode?.replaceChild(wrapper, pre)
       })
       .catch((err: unknown) => {
@@ -334,7 +336,17 @@ export async function renderMermaidIn(container: HTMLElement): Promise<void> {
         // tailwind 类在网页端生效；扩展导出页没有 tailwind，退回 .mermaid-error 基础样式
         errDiv.className =
           'mermaid-error my-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm'
-        errDiv.textContent = '⚠ Mermaid 图表渲染失败，请检查图表语法是否正确（详情见浏览器控制台）'
+        const msg = document.createElement('p')
+        msg.className = 'mermaid-error-msg font-medium'
+        msg.textContent = '⚠ Mermaid 图表渲染失败，请检查图表语法是否正确（详情见浏览器控制台）'
+        // 原始代码必须保留（预览可见、导出为代码块），供用户修正语法后重新导出
+        const srcPre = document.createElement('pre')
+        srcPre.className = 'mermaid-error-code mt-2 text-xs whitespace-pre-wrap font-mono'
+        const srcCode = document.createElement('code')
+        srcCode.textContent = diagramText
+        srcPre.appendChild(srcCode)
+        errDiv.appendChild(msg)
+        errDiv.appendChild(srcPre)
         pre.parentNode?.replaceChild(errDiv, pre)
       })
 

@@ -253,28 +253,29 @@ async function fetchBytesCached(url: string): Promise<Uint8Array> {
 }
 
 /**
- * 浏览器扩展构建（__EXT_COMPRESSED_FONTS__）：
- *   扩展包内字体为 WOFF v1（构建期由 scripts/build-extension.mjs 逐表压缩，
+ * WOFF 字体管线（__WOFF_FONTS__，三端统一开启）：
+ *   产物内字体为 WOFF v1（构建期由 scripts/lib/ttf-to-woff.mjs 逐表压缩，
  *   体积约为 TTF 的 60%），加载后用浏览器原生 DecompressionStream 解回 TTF
  *   再交给 harfbuzz 子集化与 FontFace。
- *   网页版 / Electron 不定义该开关，行为不变（直接 fetch TTF）。
- *   不用 WOFF2：其 wasm 运行时依赖 eval/new Function，与 MV3 CSP 冲突。
+ *   Node 测试环境不受影响（直接读 public/fonts 的 TTF）。
+ *   不用 WOFF2：其 wasm 运行时依赖 eval/new Function，与 MV3 CSP 冲突；
+ *   WOFF v1 无此限制且三端行为一致。
  */
-declare const __EXT_COMPRESSED_FONTS__: boolean | undefined
+declare const __WOFF_FONTS__: boolean | undefined
 
-const EXT_COMPRESSED_FONTS: boolean =
-  typeof __EXT_COMPRESSED_FONTS__ !== 'undefined' && __EXT_COMPRESSED_FONTS__ === true
+const WOFF_FONTS: boolean =
+  typeof __WOFF_FONTS__ !== 'undefined' && __WOFF_FONTS__ === true
 
 async function fetchFontBytes(def: FontDef): Promise<Uint8Array> {
   const base = fontBaseUrl()
-  if (EXT_COMPRESSED_FONTS && !isNodeEnv() && def.file.endsWith('.ttf')) {
+  if (WOFF_FONTS && !isNodeEnv() && def.file.endsWith('.ttf')) {
     const woffUrl = `${base}${def.file.replace(/\.ttf$/, '.woff')}`
     try {
       const woff = await fetchBytesCached(woffUrl)
       const { decodeWoff } = await import('../../../extension/src/lib/woff.js')
       return await decodeWoff(woff)
     } catch {
-      // 包内缺 .woff（开发目录 / 旧包）→ 回退 TTF
+      // 包内缺 .woff（dev 模式 / 旧包）→ 回退 TTF
       return fetchBytesCached(`${base}${def.file}`)
     }
   }

@@ -42,8 +42,8 @@
   background: #f6f8fa;
   border-radius: 6px;
   border: 1px solid #d0d7de;
-  padding: 1em;
-  margin: 1em 0;
+  padding: 0.75em 1em;
+  margin: 0.75em 0;
   font-size: 0.9rem;
   line-height: 1.6;
   overflow-x: auto;
@@ -69,26 +69,26 @@
 .md-preview table {
   width: 100%;
   border-collapse: collapse;
-  margin: 1em 0;
+  margin: 0.75em 0;
   font-size: 0.9rem;
 }
 
 .md-preview th {
-  padding: 10px 12px;
+  padding: 6px 10px;
   text-align: left;
   font-weight: 600;
   color: #374151;
 }
 
 .md-preview td {
-  padding: 6px 12px;
+  padding: 4px 10px;
   text-align: left;
 }
 
 .md-preview blockquote {
   border-left: 4px solid #d1d5db;
-  margin: 1em 0;
-  padding: 0.5em 1.2em;
+  margin: 0.75em 0;
+  padding: 0.4em 1em;
   color: #6b7280;
   background: #f9fafb;
   font-style: italic;
@@ -104,7 +104,7 @@
 
 .md-preview .math-block {
   text-align: center;
-  margin: 1em 0;
+  margin: 0.75em 0;
   text-indent: 0;
 }
 
@@ -113,7 +113,7 @@
 }
 
 .md-preview hr {
-  margin: 2em 0;
+  margin: 1.5em 0;
   border: none;
   border-top: 1px solid #e5e7eb;
 }
@@ -121,12 +121,11 @@
 .md-preview ul,
 .md-preview ol {
   padding-left: 2em;
-  margin: 0.5em 0 1em;
+  margin: 0.4em 0 0.8em;
 }
 
 .md-preview li {
-  line-height: 1.5;
-  margin-bottom: 0.3em;
+  margin-bottom: 0.2em;
   text-indent: 0;
 }
 
@@ -183,7 +182,7 @@
   text-align: center;
   font-size: 0.85em;
   color: #374151;
-  margin: 0.4em 0 1.2em;
+  margin: 0.3em 0 0.9em;
   text-indent: 0;
   line-height: 1.5;
 }
@@ -203,7 +202,7 @@
   font-size: 29px; /* 二号 22pt */
   font-weight: 700;
   text-align: center;
-  margin: 1.5em 0 1em;
+  margin: 1em 0 0.7em;
   padding-bottom: 0;
 }
 
@@ -219,21 +218,21 @@
   font-size: 21.3px; /* 三号 16pt */
   font-weight: 700;
   text-align: center;
-  margin: 1.5em 0 1em;
+  margin: 1.2em 0 0.6em;
 }
 
 .md-preview.tpl-academic h3 {
   font-size: 18.7px; /* 四号 14pt */
   font-weight: 700;
   text-align: left;
-  margin: 1.2em 0 0.8em;
+  margin: 1em 0 0.5em;
 }
 
 .md-preview.tpl-academic h4 {
   font-size: 16px;
   font-weight: 700;
   text-align: left;
-  margin: 1em 0 0.5em;
+  margin: 0.9em 0 0.4em;
 }
 
 .md-preview.tpl-academic p.academic-abstract {
@@ -255,7 +254,7 @@
   font-size: 21.3px;
   font-weight: 700;
   text-align: center;
-  margin: 1.5em 0 1em;
+  margin: 1.2em 0 0.6em;
 }
 
 .md-preview.tpl-academic p.academic-ref-item,
@@ -304,14 +303,14 @@
   font-size: 21.3px; /* 三号 16pt */
   font-weight: 700;
   text-align: left;
-  margin: 1.2em 0 0.8em;
+  margin: 1.1em 0 0.6em;
 }
 
 .md-preview.tpl-general h2 {
   font-size: 18.7px; /* 四号 14pt */
   font-weight: 700;
   text-align: left;
-  margin: 1.2em 0 0.8em;
+  margin: 1.1em 0 0.6em;
 }
 
 .md-preview.tpl-general h3,
@@ -319,7 +318,7 @@
   font-size: 16px;
   font-weight: 700;
   text-align: left;
-  margin: 1em 0 0.5em;
+  margin: 0.9em 0 0.4em;
 }
 
 .md-preview.tpl-general p:not([class]) {
@@ -349,7 +348,7 @@
   font-weight: 700;
   color: #1f4e79;
   text-align: left;
-  margin: 1.2em 0 0.6em;
+  margin: 1.1em 0 0.5em;
 }
 
 .md-preview.tpl-report h2 {
@@ -357,7 +356,7 @@
   font-weight: 700;
   color: #2e5e8c;
   text-align: left;
-  margin: 1.1em 0 0.5em;
+  margin: 1em 0 0.4em;
 }
 
 .md-preview.tpl-report h3,
@@ -366,7 +365,7 @@
   font-weight: 700;
   color: #2e5e8c;
   text-align: left;
-  margin: 1em 0 0.5em;
+  margin: 0.9em 0 0.4em;
 }
 
 .md-preview.tpl-report p:not([class]) {
@@ -400,6 +399,29 @@
 .a4-page .mermaid-rendered svg {
   max-width: 100%;
   height: auto;
+}
+
+/* Mermaid 渲染失败兜底框（网页端有 Tailwind，扩展导出页只有这里的基础样式） */
+.md-preview .mermaid-error {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.875rem;
+}
+
+.md-preview .mermaid-error .mermaid-error-code {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #fecaca;
+  border-radius: 0.375rem;
+  background: #ffffff;
+  color: #7f1d1d;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ── Dark mode overrides ─────────────────────────────────────────────────── */

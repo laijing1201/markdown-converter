@@ -14,6 +14,10 @@ interface ToolbarProps {
   onRepairFormat: () => void
   onOpenSettings: () => void
   onOpenHistory: () => void
+  /** 粘贴 AI 对话分享链接，自动抓取内容转为 Markdown */
+  onImportLink: () => void
+  /** 多个 .md 文件批量转换为 Word 并打包下载 */
+  onBatchExport: () => void
   darkMode: boolean
   onToggleDarkMode: () => void
   scrollSyncEnabled: boolean
@@ -41,6 +45,8 @@ export default function Toolbar({
   onRepairFormat,
   onOpenSettings,
   onOpenHistory,
+  onImportLink,
+  onBatchExport,
   darkMode,
   onToggleDarkMode,
   scrollSyncEnabled,
@@ -67,6 +73,13 @@ export default function Toolbar({
 
       {/* 文档修复类 */}
       <div className="flex gap-1 flex-wrap items-center">
+        <button
+          onClick={onImportLink}
+          className={ghostBtn}
+          title="粘贴 DeepSeek / ChatGPT / Kimi 等 AI 平台的对话分享链接，自动抓取内容转为 Markdown（支持多个链接合并导入）"
+        >
+          🔗 链接导入
+        </button>
         <button
           onClick={onRepairFormat}
           className={ghostBtn}
@@ -120,6 +133,14 @@ export default function Toolbar({
           title="查看最终效果：真实分页、页眉页脚、页码，导出前先看「第 3 页是什么样」"
         >
           最终效果
+        </button>
+        <button
+          onClick={onBatchExport}
+          disabled={busy}
+          className={ghostBtn}
+          title="批量转换：一次选择多个 .md 文件，统一套用当前模板转为 Word 并打包下载 ZIP"
+        >
+          📦 批量转换
         </button>
         <button
           onClick={onExportPdf}

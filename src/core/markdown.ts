@@ -1,6 +1,9 @@
 import { marked } from 'marked'
 import { markedHighlight } from 'marked-highlight'
-import hljs from 'highlight.js'
+// 只打包常见语言（~37 种，覆盖 Markdown 场景的绝大多数）：
+// 全量 highlight.js 约 1MB 且 95% 的语言永远用不到；未收录语言走
+// 现有的"转义纯文本"分支，行为可预期。
+import hljs from 'highlight.js/lib/common'
 import DOMPurify from 'dompurify'
 
 // ─── Configure marked with highlight.js ────────────────────────────────────────
@@ -23,7 +26,7 @@ marked.use(
 
 // ─── Math placeholder engine ───────────────────────────────────────────────────
 
-import { blockMathRe, inlineMathRe, extractFormulas } from './mathSyntax'
+import { blockMathRe, inlineMathRe, bracketBlockMathRe, parenInlineMathRe, extractFormulas, repairMangledFormula } from './mathSyntax'
 // 公式语法工具（正则/extractFormulas）已抽取到 core/mathSyntax（零依赖共享），
 // 这里保留 re-export 维持原有公共 API 兼容（preflight / 扩展 / 测试共用）。
 export { extractFormulas }
@@ -40,6 +43,11 @@ const mathStore: Record<string, MathEntry> = {}
 /**
  * Pre-process raw markdown: extract LaTeX delimiters and replace them
  * with safe placeholders so `marked` doesn't mangle the math content.
+ *
+ * 支持四类定界符：$$...$$、\[...\]、$...$、\(...\)（后两类是学术/pandoc
+ * 文档的常见写法，此前不支持会导致整段 LaTeX 源码漏到正文）。
+ * 提取时对公式内容做粘贴污染修复（KaTeX 三重复制还原，见 repairMangledFormula），
+ * 预览与导出走同一份修复结果，保证三者一致。
  */
 export function extractMathPlaceholders(markdown: string): string {
   mathCounter = 0
@@ -50,24 +58,30 @@ export function extractMathPlaceholders(markdown: string): string {
 
   let result = markdown
 
-  // 1) Block math $$...$$  (greedy, multiline)
-  result = result.replace(blockMathRe(), (_match, formula: string) => {
+  const storeBlock = (formula: string) => {
     const key = `%%MATH_BLOCK_${mathCounter}%%`
-    mathStore[key] = { formula: formula.trim(), isBlock: true }
+    mathStore[key] = { formula: repairMangledFormula(formula.trim()), isBlock: true }
     mathCounter++
     return key
-  })
+  }
+  const storeInline = (formula: string) => {
+    const key = `%%MATH_INLINE_${mathCounter}%%`
+    mathStore[key] = { formula: repairMangledFormula(formula.trim()), isBlock: false }
+    mathCounter++
+    return key
+  }
+
+  // 1) Block math $$...$$  (greedy, multiline)
+  result = result.replace(blockMathRe(), (_match, formula: string) => storeBlock(formula))
+
+  // 1.5) Block math \[...\]（LaTeX 标准行间定界符）
+  result = result.replace(bracketBlockMathRe(), (_match, formula: string) => storeBlock(formula))
 
   // 2) Inline math $...$ (single line, not part of a block formula)
-  result = result.replace(
-    inlineMathRe(),
-    (_match, formula: string) => {
-      const key = `%%MATH_INLINE_${mathCounter}%%`
-      mathStore[key] = { formula: formula.trim(), isBlock: false }
-      mathCounter++
-      return key
-    },
-  )
+  result = result.replace(inlineMathRe(), (_match, formula: string) => storeInline(formula))
+
+  // 2.5) Inline math \(...\)（LaTeX 标准行内定界符）
+  result = result.replace(parenInlineMathRe(), (_match, formula: string) => storeInline(formula))
 
   return result
 }
@@ -100,34 +114,44 @@ const ZWSP = '\u200B'
 const CJK_LETTER_RE = /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF]/
 // ASCII 标点 + Unicode 通用标点 + CJK/全角标点
 const PUNCT_RE = /[!-/:-@[-`{-~\u2000-\u206F\u3000-\u303F\uFF01-\uFF65]/
+// CJK 语境标点（全角/CJK 符号 + 中文行文常用的破折号引号省略号）：
+// 只有相邻字符落在这里时才认定"这是中文文档的写法"，纯英文 CommonMark 行为不动
+const CJK_PUNCT_RE = /[\u3000-\u303F\uFF01-\uFF65\u00B7\u2013\u2014\u2018\u2019\u201C\u201D\u2026]/
+const LATIN_ALNUM_RE = /[0-9A-Za-z]/
 
 /**
  * CommonMark 的 flanking 规则会让中文文档里最常见的写法失效：
  *   `**位置：**引言贡献` —— 闭合 ** 前是标点（：）、后紧跟汉字，
- *   不满足 right-flanking，marked 输出字面星号。
+ *   `**位置：**PDF第1页` —— 闭合 ** 前是标点（：）、后紧跟英文/数字，
+ *   两者都不满足 right-flanking，marked 输出字面星号。
  *   （后跟空格/引号/标点时正常，所以同一份文档里时好时坏。）
  * 修复：给失配的定界符在内侧补一个零宽空格使其满足规则，marked 解析完成后
- * 再把零宽空格统一剥除，不进入最终 HTML。只在失配边界至少一侧是 CJK 时介入，
- * 纯英文/纯符号输入的 CommonMark 行为保持不变。数学占位符在本步骤之前已提取，
- * 公式内容不受影响。
+ * 再把零宽空格统一剥除，不进入最终 HTML。只在失配边界至少一侧是 CJK 时介入
+ * （CJK 汉字或全角/CJK 标点邻接），纯英文/纯符号输入的 CommonMark 行为保持
+ * 不变。数学占位符在本步骤之前已提取，公式内容不受影响。
  */
 export function repairCjkEmphasis(markdown: string): string {
   let out = ''
   let i = 0
   const n = markdown.length
+  const isCJKContext = (prev: string, next: string) =>
+    (prev && CJK_LETTER_RE.test(prev)) ||
+    (prev && CJK_PUNCT_RE.test(prev)) ||
+    (next && CJK_LETTER_RE.test(next)) ||
+    (next && CJK_PUNCT_RE.test(next))
   while (i < n) {
     const two = markdown.slice(i, i + 2)
     if (two === '**' || two === '__') {
       const prev = i > 0 ? markdown[i - 1] : ''
       const next = i + 2 < n ? markdown[i + 2] : ''
-      // 闭合失败：前是标点、后是 CJK → 在 ** 内侧（前）补零宽空格
-      if (prev && PUNCT_RE.test(prev) && next && CJK_LETTER_RE.test(next)) {
+      // 闭合失败：前是标点、后是 CJK/英数（且处于 CJK 语境）→ 在 ** 内侧（前）补零宽空格
+      if (prev && next && PUNCT_RE.test(prev) && !PUNCT_RE.test(next) && isCJKContext(prev, next)) {
         out += ZWSP + two
         i += 2
         continue
       }
-      // 打开失败：前是 CJK、后是标点 → 在 ** 内侧（后）补零宽空格
-      if (next && CJK_LETTER_RE.test(prev) && PUNCT_RE.test(next)) {
+      // 打开失败：前是 CJK/英数、后是标点（且处于 CJK 语境）→ 在 ** 内侧（后）补零宽空格
+      if (prev && next && !PUNCT_RE.test(prev) && PUNCT_RE.test(next) && isCJKContext(prev, next)) {
         out += two + ZWSP
         i += 2
         continue
@@ -136,6 +160,22 @@ export function repairCjkEmphasis(markdown: string): string {
       i += 2
       continue
     }
+    // 单字符 * / _ 的同类失配（CJK 斜体写法较少，但规则一致、修复同样安全）
+    const one = markdown[i]
+    if (one === '*' || one === '_') {
+      const prev = i > 0 ? markdown[i - 1] : ''
+      const next = i + 1 < n ? markdown[i + 1] : ''
+      if (prev && next && PUNCT_RE.test(prev) && !PUNCT_RE.test(next) && isCJKContext(prev, next)) {
+        out += ZWSP + one
+        i++
+        continue
+      }
+      if (prev && next && !PUNCT_RE.test(prev) && PUNCT_RE.test(next) && isCJKContext(prev, next)) {
+        out += one + ZWSP
+        i++
+        continue
+      }
+    }
     out += markdown[i]
     i++
   }
@@ -143,6 +183,16 @@ export function repairCjkEmphasis(markdown: string): string {
 }
 
 // ─── Block extensions: 分页符 / 图题表题 ──────────────────────────────────────
+
+/**
+ * 修复被转义污染的加粗标记：源文本里的 \*\*加粗\*\*（AI 输出/复制转义常见）
+ * 还原为 **加粗**，让正常的 emphasis 解析接管。只处理成对的 \*\*…\*\*，
+ * 单个 \*\*（用户想显示字面星号）不受影响。数学占位符在本步骤之前已提取，
+ * 公式内容不受影响。
+ */
+export function unEscapeMangledEmphasis(markdown: string): string {
+  return markdown.replace(/\\\*\\\*([^*\n]{1,300}?)\\\*\\\*/g, '**$1**')
+}
 
 /** 统计分页符数量（preflight/统计用） */
 export function countPagebreaks(markdown: string): number {
@@ -173,6 +223,14 @@ export function extractBlockExtensions(markdown: string): string {
     () => '%%PAGEBREAK%%',
   )
 
+  // PDF 提取工具（pymupdf4llm / marker / doc2x 等）留下的分页标记行：
+  //   ===== Page 1 =====、----- Page 2 -----、==== Page 3 ====
+  // 映射为真正的 Word/PDF 分页符，标记本身不得进入正文。
+  result = result.replace(
+    /^[ \t]*([=]{3,}|[-]{3,}|[~]{3,}|[_]{3,})[ \t]*page[ \t]+#?\d+(?:[ \t]*\1)?[ \t]*$/gim,
+    () => '%%PAGEBREAK%%',
+  )
+
   result = result.replace(
     /^[ \t]*([*_])[ \t]*(图|表|Figure|Table|Fig\.?)[ \t]*\d*[ \t]*[:：][ \t]*(.*?)[ \t]*\1[ \t]*$/gim,
     (_m, _mark: string, kindWord: string, text: string) => {
@@ -185,6 +243,42 @@ export function extractBlockExtensions(markdown: string): string {
   )
 
   return result
+}
+
+/**
+ * 把「混进段落文本里的 HTML 表格片段」还原为真表格。
+ *
+ * 来源：PDF 提取/AI 复制的内容里，<table>…</table> 常与正文挤在同一段，
+ * marked 只把行首的 HTML 块解析为真表格，段内的会转义成字面文本
+ * （&lt;table&gt;…），预览和导出都会漏出一堆标签。
+ * 这里把「整段（去空白后）恰好是一个 <table>…</table> 片段」的段落还原为
+ * 真表格节点；混排段落（表格前后还有正文）不动，保持保守。
+ */
+function hoistEmbeddedHtmlTables(html: string): string {
+  return html.replace(/<p>([\s\S]*?)<\/p>/g, (m, inner: string) => {
+    if (!/&lt;table[\s&gt;]/i.test(inner)) return m
+    const decoded = inner
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&')
+    const trimmed = decoded.trim()
+    // 整段恰好是一个表格片段
+    if (/^<table[\s>]/i.test(trimmed) && /<\/table>$/i.test(trimmed)) return trimmed
+    // 混排段落：抽出完整表格片段，前后文本保留为独立段落
+    const tm = decoded.match(/<table[\s>][\s\S]*<\/table>/i)
+    if (!tm || tm.index === undefined) return m
+    const tableHtml = tm[0]
+    if (!/<tr[\s>][\s\S]*?<t[dh][\s>]/i.test(tableHtml)) return m
+    const before = decoded.slice(0, tm.index).trim()
+    const after = decoded.slice(tm.index + tableHtml.length).trim()
+    const parts: string[] = []
+    if (before) parts.push(`<p>${before}</p>`)
+    parts.push(tableHtml)
+    if (after) parts.push(`<p>${after}</p>`)
+    return parts.join('')
+  })
 }
 
 function escapeHtmlText(text: string): string {
@@ -237,25 +331,32 @@ export function restoreBlockExtensions(html: string): string {
  * Convert a raw markdown string to a safe, render-ready HTML string.
  *
  * Pipeline:
- *   raw MD  →  block extensions (pagebreak/caption)  →  extract math placeholders
- *   →  CJK emphasis repair  →  marked (with highlight.js)  →  restore math
- *   →  restore block extensions  →  strip ZWSP  →  DOMPurify  →  output
+ *   raw MD  →  block extensions (pagebreak/caption/PDF页标记)  →  extract math placeholders
+ *   →  un-escape 转义加粗  →  CJK emphasis repair  →  marked (with highlight.js)
+ *   →  hoist 段内 HTML 表格  →  restore math  →  restore block extensions
+ *   →  strip ZWSP  →  DOMPurify  →  output
  */
 export function markdownToSafeHtml(markdown: string): string {
-  // Step 1 – pagebreak / caption 语法预处理
+  // Step 1 – pagebreak / caption / PDF 分页标记 预处理
   const withExtensions = extractBlockExtensions(markdown)
 
   // Step 2 – protect LaTeX
   const withPlaceholders = extractMathPlaceholders(withExtensions)
 
+  // Step 2.4 – 还原被转义污染的 **加粗** 标记
+  const withUnescapedEmphasis = unEscapeMangledEmphasis(withPlaceholders)
+
   // Step 2.5 – CJK 邻接的 **强调** 修正（零宽空格在 Step 7 剥除）
-  const withEmphasisFix = repairCjkEmphasis(withPlaceholders)
+  const withEmphasisFix = repairCjkEmphasis(withUnescapedEmphasis)
 
   // Step 3 – marked parse (handles code blocks, tables, etc.)
   const rawHtml = marked.parse(withEmphasisFix) as string
 
+  // Step 3.5 – 段内 HTML 表格片段还原为真表格
+  const htmlHoisted = hoistEmbeddedHtmlTables(rawHtml)
+
   // Step 4 – put math markers back as HTML elements
-  const htmlWithMath = restoreMathInHtml(rawHtml)
+  const htmlWithMath = restoreMathInHtml(htmlHoisted)
 
   // Step 5 – pagebreak / caption 占位还原 + task-list 类名
   const htmlRestored = restoreBlockExtensions(htmlWithMath)
