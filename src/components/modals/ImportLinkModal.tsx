@@ -140,10 +140,29 @@ export default function ImportLinkModal({ onApply, onClose }: ImportLinkModalPro
           )}
 
           {globalError && (
-            <p className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-md px-3 py-2">
-              {globalError}
-            </p>
+            <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-md px-3 py-2 flex items-center justify-between gap-2">
+              <span>{globalError}</span>
+              <button
+                onClick={() => void handleImport()}
+                className="shrink-0 px-2.5 py-1 rounded-md border border-red-300 dark:border-red-700 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors font-medium"
+              >
+                重试
+              </button>
+            </div>
           )}
+
+          <details className="text-xs text-gray-500 dark:text-gray-400">
+            <summary className="cursor-pointer select-none text-gray-600 dark:text-gray-300 font-medium">
+              各平台如何获取对话分享链接？
+            </summary>
+            <ul className="mt-1.5 space-y-1 list-disc pl-4">
+              <li>ChatGPT：对话右上角「<b>Share / 分享</b>」→「Create link」，复制生成的 chatgpt.com/share/… 链接</li>
+              <li>DeepSeek：对话右上角「<b>分享</b>」→ 复制 chat.deepseek.com/share/… 链接</li>
+              <li>Kimi：对话右上角「<b>分享</b>」→「创建公开链接」</li>
+              <li>豆包 / 腾讯元宝 / 文心一言 / 通义千问：对话右上角「<b>分享</b>」→ 生成公开访问链接后复制</li>
+            </ul>
+            <p className="mt-1.5">注意：链接必须是<b>公开可访问</b>的分享链接；需要登录才能查看的对话无法抓取。抓取仅转发页面内容，不做存储。</p>
+          </details>
 
           {results.length > 0 && (
             <p className="text-xs text-emerald-700 dark:text-emerald-300">

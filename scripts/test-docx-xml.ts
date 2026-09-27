@@ -298,6 +298,30 @@ console.log('\n── 甲方验收回归（\(\) 公式 / Page 标记 / HTML 表�
 mkdirSync('scripts/tmp', { recursive: true })
 writeFileSync('scripts/tmp/p3-test.docx', bytes)
 
+// ── 含 < > & 的公式必须转 OMML（mathml2omml 不转义 <m:t> 文本的回归）──
+{
+  const { latexToOmml } = await import('../src/core/omml')
+  const cases: Array<[string, string, boolean]> = [
+    ['不等式 x < 0', 'x < 0', false],
+    ['大于号 y > 1', 'y > 1', false],
+    ['区间集合', '{x \\in \\mathbb{R} \\mid x < 3}', true],
+    ['且含 &', 'A \\cap B = \\{x \\mid x < 3 \\wedge y > 2\\}', true],
+    ['分段函数 cases', '\\begin{cases} x^2, & x \\ge 0 \\\\ -x, & x < 0 \\end{cases}', true],
+    ['求和含分式', '\\sum_{i=1}^{n} \\frac{1}{i^2} = \\frac{\\pi^2}{6}', true],
+    ['矩阵 pmatrix', '\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}', true],
+  ]
+  for (const [label, latex, block] of cases) {
+    check(`OMML 转义回归：${label}`, latexToOmml(latex, block) !== null, latex)
+  }
+  const docIsh = await buildDocxBlob(
+    '<p>不等式 <span class="math-inline" data-formula="x%20%3C%200"></span> 成立。</p>',
+    { settings: { ...DEFAULT_SETTINGS, headingNumbering: 'off' } },
+  )
+  const zipI = await JSZip.loadAsync(new Uint8Array(await docIsh.arrayBuffer()))
+  const docI = (await zipI.file('word/document.xml')?.async('string')) ?? ''
+  check('含 < 的公式在 docx 中为 OMML 而非图片/文本', docI.includes('<m:oMath') && !docI.includes('x&lt;0</w:t>') && !docI.includes('<w:drawing>'))
+}
+
 // ── Mermaid 截图失败兜底 + 公式降级统计（需求：渲染失败保留原始代码、逐条列出失败公式）──
 {
   const { getLastDocxExportStats } = await import('../src/core/exporter')

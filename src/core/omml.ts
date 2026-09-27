@@ -51,9 +51,15 @@ export function latexToOmml(latex: string, displayMode: boolean): ImportedXmlCom
       const mathml = mathMatch[0].replace(/<annotation[\s\S]*?<\/annotation>/g, '')
       const omml = mml2omml(mathml)
       if (omml.includes('<m:oMath')) {
+        // mathml2omml 重新序列化时不转义文本节点：MathML 里的 &lt;（如 x < 0）
+        // 会变成裸 <，后续 fromXmlString 解析直接抛错 → 整个公式降级为图片。
+        // 这里把 <m:t> 文本内容统一转义后再进 XML 解析。
+        // 注意开标签不能匹配到自闭合的 <m:t/>，否则会吞掉中间的标签结构。
+        const safeOmml = omml.replace(/(<m:t(?: [^>]*)?>)([\s\S]*?)(<\/m:t>)/g, (_m, open: string, text: string, close: string) =>
+          open + text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + close)
         const xml = displayMode
-          ? `<m:oMathPara><m:oMathParaPr><m:jc m:val="center"/></m:oMathParaPr>${omml}</m:oMathPara>`
-          : omml
+          ? `<m:oMathPara><m:oMathParaPr><m:jc m:val="center"/></m:oMathParaPr>${safeOmml}</m:oMathPara>`
+          : safeOmml
         result = extractElementComponent(xml)
       }
     }

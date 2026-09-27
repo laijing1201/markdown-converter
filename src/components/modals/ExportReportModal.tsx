@@ -24,6 +24,30 @@ interface ExportReportModalProps {
   onClose: () => void
 }
 
+/** 报告文件名：导出质量报告-20260927-1430.txt/json */
+function reportFileStem(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `导出质量报告-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
+}
+
+/** 报告文本版（甲方「报告可导出为文本」） */
+function reportToText(report: ExportQualityReport): string {
+  const lines = [
+    'MarkDoc 导出质量自检报告',
+    `时间：${new Date().toLocaleString()}`,
+    `耗时：${(report.durationMs / 1000).toFixed(1)}s`,
+    '',
+    `公式：共 ${report.mathTotal} 个，成功转换 ${report.mathTotal - report.degraded.length} 个，失败 ${report.degraded.length} 个`,
+    ...report.degraded.map((d) => `  - 失败${d.line !== undefined ? `（第 ${d.line} 行）` : ''}：${d.formula}`),
+    `表格：共 ${report.tables} 张${report.tablesFromEmbeddedText ? `（含 ${report.tablesFromEmbeddedText} 张由 HTML 文本还原）` : '，均为 Word 原生表格'}`,
+    `Mermaid 图：共 ${report.mermaidTotal} 张，成功嵌入 ${report.mermaidCaptured} 张`,
+    `警告：${report.warnings.length} 条`,
+    ...report.warnings.map((w) => `  - ${w}`),
+  ]
+  return lines.join('\n') + '\n'
+}
+
 function StatChip({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
   return (
     <div
@@ -47,6 +71,19 @@ export default function ExportReportModal({ report, onClose }: ExportReportModal
   const allMermaidOk = report.mermaidCaptured >= report.mermaidTotal
   const noWarnings = report.warnings.length === 0
   const secs = (report.durationMs / 1000).toFixed(1)
+
+  const handleDownloadReport = (fmt: 'txt' | 'json') => {
+    const content = fmt === 'json'
+      ? JSON.stringify({ generatedAt: new Date().toISOString(), ...report }, null, 2)
+      : reportToText(report)
+    const blob = new Blob([content], { type: fmt === 'json' ? 'application/json' : 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${reportFileStem()}.${fmt}`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -119,7 +156,23 @@ export default function ExportReportModal({ report, onClose }: ExportReportModal
           )}
         </div>
 
-        <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-700 flex justify-end">
+        <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between gap-2">
+          <span className="flex gap-2">
+            <button
+              onClick={() => handleDownloadReport('txt')}
+              className="px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              title="下载文本版报告"
+            >
+              导出报告 .txt
+            </button>
+            <button
+              onClick={() => handleDownloadReport('json')}
+              className="px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              title="下载 JSON 版报告（供系统归档）"
+            >
+              导出报告 .json
+            </button>
+          </span>
           <button
             onClick={onClose}
             data-testid="export-report-close"
