@@ -80,6 +80,15 @@ if (shouldIncludeElectron()) {
 export default defineConfig({
   // 相对路径同时兼容 GitHub Pages 子路径（/markdown-converter/）与 Electron file://
   base: './',
+  // 管理员后台独立入口（admin.html）：与主站同仓同部署，会话与主站完全隔离
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        admin: resolve(__dirname, 'admin.html'),
+      },
+    },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_COMMIT__: JSON.stringify(resolveCommit()),

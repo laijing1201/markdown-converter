@@ -28,4 +28,5 @@ export {
   type Remaining,
 } from './quota'
 export { saveCloudHistory, exportMyHistoryJson } from './cloudHistory'
+export { exportAccountData, deleteAccount } from './selfService'
 export { getDeviceId } from './fingerprint'

@@ -13,6 +13,7 @@ import PdfPreviewModal from './components/modals/PdfPreviewModal'
 import AuthModal, { type AuthModalMode } from './components/modals/AuthModal'
 import ImportLinkModal from './components/modals/ImportLinkModal'
 import BatchExportModal from './components/modals/BatchExportModal'
+import AccountModal from './components/modals/AccountModal'
 import {
   accountEnabled,
   onAuthChange,
@@ -186,6 +187,7 @@ export default function App() {
   const [exportReport, setExportReport] = useState<ExportQualityReport | null>(null)
   const [showImportLink, setShowImportLink] = useState(false)
   const [showBatchExport, setShowBatchExport] = useState(false)
+  const [showAccount, setShowAccount] = useState(false)
   const exportCancelRef = useRef(false)
   const [toast, setToast] = useState<ToastState | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -773,9 +775,9 @@ export default function App() {
   const accountBadge = accountEnabled ? (
     authUser ? (
       <button
-        onClick={handleSignOut}
+        onClick={() => setShowAccount(true)}
         className="max-w-[11rem] truncate px-2.5 py-1.5 text-xs rounded-md bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors"
-        title={`已登录：${authUser.email}（点击退出登录，历史记录保留在账号中）`}
+        title={`已登录：${authUser.email}（点击打开账号中心：修改密码 / 退出所有设备 / 数据导出 / 注销）`}
       >
         {authUser.email}
       </button>
@@ -909,6 +911,21 @@ export default function App() {
         <ExportReportModal
           report={exportReport}
           onClose={() => setExportReport(null)}
+        />
+      )}
+
+      {showAccount && authUser && (
+        <AccountModal
+          user={authUser}
+          onToast={(icon, message) => showToast(icon, message)}
+          onClose={() => setShowAccount(false)}
+          onDeleted={() => {
+            // 全设备登出 / 注销成功：清登录态并刷新（云端历史随之锁定）
+            setShowAccount(false)
+            void signOut()
+            setAuthUser(null)
+            showToast('✓', '已退出登录（所有设备）')
+          }}
         />
       )}
 
