@@ -2,8 +2,11 @@
 // AI 对话分享链接抓取代理 ——「链接导入」功能的服务端取页面端点
 //
 //   POST /functions/v1/import-link
-//   body: { url: string }          ← 必须是白名单内 AI 平台的公开分享链接
-//   返回: { html, finalUrl }       ← 只回传页面 HTML，提取在浏览器端完成
+//   body: { url: string, raw?: boolean }
+//     raw=false（默认）→ 返回 { kind:'html', html, finalUrl }，提取在浏览器端完成
+//     raw=true          → 返回 { kind:'json', body, finalUrl }，页面本身是 JSON API
+//                         （DeepSeek 分享页是 SPA 空壳，对话正文必须走
+//                          /api/v0/share/content JSON 接口，浏览器端无法跨域直调）
 //
 // 安全约束：
 //   - 仅接受 https 且 hostname 在 AI 平台白名单内的 URL（防 SSRF）
@@ -43,9 +46,11 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return badRequest('Method not allowed', 405)
 
   let target: URL
+  let raw = false
   try {
-    const body = await req.json() as { url?: string }
+    const body = await req.json() as { url?: string; raw?: boolean }
     if (!body.url) return badRequest('缺少 url 参数')
+    raw = body.raw === true
     target = new URL(body.url)
   } catch {
     return badRequest('请求体不是合法 JSON 或 url 非法')
@@ -102,5 +107,6 @@ Deno.serve(async (req: Request) => {
   if (status !== 200) return json({ error: `分享页返回 ${status}，链接可能已失效或需要登录`, status }, 200)
   if (!html) return json({ error: '页面内容为空' }, 200)
 
-  return json({ html, finalUrl: current.href })
+  if (raw) return json({ kind: 'json', body: html, finalUrl: current.href })
+  return json({ kind: 'html', html, finalUrl: current.href })
 })

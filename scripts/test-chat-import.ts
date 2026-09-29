@@ -177,5 +177,59 @@ console.log('对话转 Markdown')
   ;(globalThis as unknown as { fetch: unknown }).fetch = originalFetch
 }
 
+// ── DeepSeek 分享：公开 JSON 接口直取（修复「SPA 空壳抓不到正文」）──────────
+console.log('DeepSeek 分享导入')
+{
+  const { deepSeekShareId, parseDeepSeekShareJson, importChatLink } = await import('../src/core/chatImport')
+
+  check('share_id 提取', deepSeekShareId('https://chat.deepseek.com/share/abc_123') === 'abc_123')
+  check('非分享路径返回 null', deepSeekShareId('https://chat.deepseek.com/a/chat/s/x') === null)
+  check('非 DeepSeek 域名返回 null', deepSeekShareId('https://example.com/share/x') === null)
+
+  const okJson = JSON.stringify({
+    code: 0,
+    data: {
+      biz_code: 0,
+      biz_data: {
+        title: '排序算法讨论',
+        messages: [
+          { message_id: 1, role: 'USER', fragments: [{ type: 'TEXT', content: '什么是快速排序？' }] },
+          { message_id: 2, role: 'ASSISTANT', fragments: [
+            { type: 'THINKING', content: '先想一下……' },
+            { type: 'TEXT', content: '快速排序是分治算法：' },
+            { type: 'TEXT', content: '```python\ndef qs(a): pass\n```' },
+          ] },
+        ],
+      },
+    },
+  })
+  const parsed = parseDeepSeekShareJson(okJson)
+  check('biz_code=0 解析成功', parsed.ok === true)
+  check('标题提取', parsed.conversation?.title === '排序算法讨论')
+  check('USER/ASSISTANT 角色映射', parsed.conversation?.messages[0].role === 'user' && parsed.conversation?.messages[1].role === 'assistant')
+  check('THINKING 片段不进正文', !parsed.conversation?.messages[1].content.includes('先想一下'))
+  check('多片段合并 + 代码块保留', parsed.conversation?.messages[1].content.includes('分治算法') && parsed.conversation?.messages[1].content.includes('```python'))
+
+  const missing = parseDeepSeekShareJson(JSON.stringify({ code: 0, data: { biz_code: 1, biz_msg: 'share does not exist' } }))
+  check('biz_code=1 → 明确中文原因', !missing.ok && missing.error?.includes('不存在或已被删除'), missing.error)
+  check('非 JSON → NOT_JSON', parseDeepSeekShareJson('<html>shell</html>').ok === false)
+  check('空消息 → EMPTY', parseDeepSeekShareJson(JSON.stringify({ code: 0, data: { biz_code: 0, biz_data: { title: 't', messages: [] } } })).ok === false)
+
+  // 集成：mock fetch 对 API 路径返回 JSON、对页面返回空壳 HTML
+  const originalFetch2 = globalThis.fetch
+  ;(globalThis as unknown as { fetch: unknown }).fetch = async (url: string) => {
+    if (String(url).includes('/api/v0/share/content')) return new Response(okJson, { status: 200 })
+    return new Response('<html><body>deepseek shell</body></html>', { status: 200 })
+  }
+  try {
+    const r = await importChatLink('https://chat.deepseek.com/share/real1')
+    check('DeepSeek 链接走 JSON 接口导入成功', r.messageCount === 2 && r.markdown.includes('排序算法讨论'), `count=${r.messageCount}`)
+  } catch (e) {
+    check('DeepSeek 链接走 JSON 接口导入成功', false, (e as Error).message)
+  } finally {
+    ;(globalThis as unknown as { fetch: unknown }).fetch = originalFetch2
+  }
+}
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`)
 process.exit(fail === 0 ? 0 : 1)

@@ -81,6 +81,8 @@ export class ChatImportError extends Error {
 }
 
 export interface FetchedPage {
+  /** kind='html'：常规分享页 HTML；kind='json'：页面本身是 JSON API（DeepSeek 分享正文） */
+  kind: 'html' | 'json'
   html: string
   /** html 经哪条路抓到：proxy=Edge Function，direct=浏览器直连 */
   via: 'proxy' | 'direct'
@@ -89,7 +91,7 @@ export interface FetchedPage {
 
 const PROXY_ENDPOINT = SUPABASE_URL ? `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/import-link` : ''
 
-async function fetchViaProxy(pageUrl: string): Promise<FetchedPage> {
+async function fetchViaProxy(pageUrl: string, raw: boolean): Promise<FetchedPage> {
   let res: Response
   try {
     res = await fetch(PROXY_ENDPOINT, {
@@ -98,7 +100,7 @@ async function fetchViaProxy(pageUrl: string): Promise<FetchedPage> {
         'Content-Type': 'application/json',
         ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}),
       },
-      body: JSON.stringify({ url: pageUrl }),
+      body: JSON.stringify({ url: pageUrl, raw }),
     })
   } catch (err) {
     throw new ChatImportError('抓取服务连接失败', err instanceof Error ? err.message : String(err))
@@ -107,16 +109,20 @@ async function fetchViaProxy(pageUrl: string): Promise<FetchedPage> {
     const body = await res.text().catch(() => '')
     throw new ChatImportError(`抓取服务返回 ${res.status}`, body.slice(0, 300))
   }
-  const data = await res.json() as { html?: string; finalUrl?: string }
+  const data = await res.json() as { kind?: 'html' | 'json'; html?: string; body?: string; finalUrl?: string }
+  if (raw) {
+    if (!data.body) throw new ChatImportError('抓取服务未返回内容')
+    return { kind: 'json', html: data.body, via: 'proxy', finalUrl: data.finalUrl || pageUrl }
+  }
   if (!data.html) throw new ChatImportError('抓取服务未返回页面内容')
-  return { html: data.html, via: 'proxy', finalUrl: data.finalUrl || pageUrl }
+  return { kind: 'html', html: data.html, via: 'proxy', finalUrl: data.finalUrl || pageUrl }
 }
 
-async function fetchDirect(pageUrl: string): Promise<FetchedPage> {
+async function fetchDirect(pageUrl: string, raw: boolean): Promise<FetchedPage> {
   try {
     const res = await fetch(pageUrl, { redirect: 'follow' })
     if (!res.ok) throw new ChatImportError(`页面返回 ${res.status}，链接可能已失效`)
-    return { html: await res.text(), via: 'direct', finalUrl: res.url || pageUrl }
+    return { kind: raw ? 'json' : 'html', html: await res.text(), via: 'direct', finalUrl: res.url || pageUrl }
   } catch (err) {
     if (err instanceof ChatImportError) throw err
     throw new ChatImportError(
@@ -126,10 +132,18 @@ async function fetchDirect(pageUrl: string): Promise<FetchedPage> {
   }
 }
 
-/** 抓取分享页 HTML：配置了 Supabase 走代理，否则尝试直连 */
+/**
+ * 抓取分享页：配置了 Supabase 走代理，否则尝试直连。
+ * raw=true 时页面本身是 JSON API（DeepSeek 分享正文接口），返回 kind='json'。
+ */
+export async function fetchChatPage(pageUrl: string, raw = false): Promise<FetchedPage> {
+  if (PROXY_ENDPOINT) return fetchViaProxy(pageUrl, raw)
+  return fetchDirect(pageUrl, raw)
+}
+
+/** 兼容旧名：抓取分享页 HTML */
 export async function fetchChatPageHtml(pageUrl: string): Promise<FetchedPage> {
-  if (PROXY_ENDPOINT) return fetchViaProxy(pageUrl)
-  return fetchDirect(pageUrl)
+  return fetchChatPage(pageUrl, false)
 }
 
 // ─── 提取：对话消息 ──────────────────────────────────────────────────────────
@@ -350,6 +364,111 @@ function extractFromHtml(html: string): ExtractedConversation | null {
   return { title: extractTitle(html), messages: [{ role: 'assistant', content: md }] }
 }
 
+// ─── DeepSeek 分享（SPA 空壳 → 公开 JSON 接口）──────────────────────────────
+//
+// chat.deepseek.com/share/<id> 的 HTML 是空壳（正文前端再调 API 拿）。
+// 分享页实际调用 GET /api/v0/share/content?share_id=<id>（免登录，公开），
+// 返回 { code, data: { biz_code, biz_msg, biz_data: { title, messages } } }：
+//   messages: [{ message_id, parent_id, role: "USER"|"ASSISTANT", fragments: [...] }]
+//   fragment: { type, content }（THINKING 类片段是思考过程，不属于答案正文）
+
+/** 从 DeepSeek 分享链接提取 share_id（/share/<id>） */
+export function deepSeekShareId(url: URL | string): string | null {
+  try {
+    const u = typeof url === 'string' ? new URL(url) : url
+    const host = u.hostname.toLowerCase()
+    if (host !== 'chat.deepseek.com' && !host.endsWith('.deepseek.com')) return null
+    const m = u.pathname.match(/\/share\/([A-Za-z0-9_-]+)/)
+    return m ? m[1] : null
+  } catch {
+    return null
+  }
+}
+
+const DEEPSEEK_API = 'https://chat.deepseek.com/api/v0/share/content'
+
+export interface DeepSeekShareParseResult {
+  ok: boolean
+  /** ok=false 时给用户的失败原因（已映射为中文） */
+  error?: string
+  conversation?: ExtractedConversation
+}
+
+function fragmentsToMarkdown(msg: Record<string, unknown>): string {
+  const fragments = Array.isArray(msg.fragments) ? msg.fragments as Array<Record<string, unknown>> : []
+  const parts: string[] = []
+  for (const f of fragments) {
+    if (!f || typeof f !== 'object') continue
+    const type = String(f.type ?? '').toUpperCase()
+    if (type.includes('THINK')) continue // 思考过程不进正文
+    const content = typeof f.content === 'string' ? f.content : ''
+    if (content.trim()) parts.push(content)
+  }
+  return parts.join('\n\n').trim()
+}
+
+/** 解析 /api/v0/share/content 的 JSON 响应 → 对话（不可解析/业务失败时 ok:false） */
+export function parseDeepSeekShareJson(text: string): DeepSeekShareParseResult {
+  let json: {
+    data?: {
+      biz_code?: number
+      biz_msg?: string
+      biz_data?: { title?: string; messages?: Array<Record<string, unknown>> }
+    }
+  }
+  try {
+    json = JSON.parse(text)
+  } catch {
+    return { ok: false, error: 'NOT_JSON' }
+  }
+  const data = json?.data
+  if (!data || typeof data.biz_code !== 'number') return { ok: false, error: 'NOT_JSON' }
+  if (data.biz_code !== 0) {
+    const msg = (data.biz_msg ?? '').toLowerCase()
+    const friendly =
+      msg.includes('not exist') ? '分享链接不存在或已被删除'
+      : msg.includes('expire') ? '分享链接已过期'
+      : msg.includes('private') || msg.includes('login') ? '该分享需要登录 DeepSeek 查看，无法直接抓取'
+      : `平台返回：${data.biz_msg ?? '未知错误'}`
+    return { ok: false, error: friendly }
+  }
+  const biz = data.biz_data ?? {}
+  const messages: ChatMessage[] = []
+  for (const raw of biz.messages ?? []) {
+    const roleRaw = String(raw.role ?? '').toUpperCase()
+    if (roleRaw !== 'USER' && roleRaw !== 'ASSISTANT') continue
+    const content = fragmentsToMarkdown(raw)
+    if (!content) continue
+    messages.push({ role: roleRaw === 'USER' ? 'user' : 'assistant', content })
+  }
+  if (messages.length === 0) return { ok: false, error: 'EMPTY' }
+  return { ok: true, conversation: { title: String(biz.title ?? '').slice(0, 120), messages: mergeAdjacent(messages) } }
+}
+
+/** DeepSeek 专用抓取：JSON 接口优先，成功返回对话，失败返回 null（调用方回退 HTML 流程） */
+async function tryDeepSeekShareJson(
+  pageUrl: string,
+  shareId: string,
+): Promise<{ conversation: ExtractedConversation; via: 'proxy' | 'direct' } | { fallback: true } | { error: ChatImportError }> {
+  const apiUrl = `${DEEPSEEK_API}?share_id=${encodeURIComponent(shareId)}`
+  let page: FetchedPage
+  try {
+    page = await fetchChatPage(apiUrl, true)
+  } catch (err) {
+    if (err instanceof ChatImportError) return { fallback: true } // 抓取层失败 → 回退 HTML 流程，不在这一层报错
+    return { fallback: true }
+  }
+  const parsed = parseDeepSeekShareJson(page.html)
+  if (parsed.ok && parsed.conversation) {
+    return { conversation: parsed.conversation, via: page.via }
+  }
+  if (parsed.error && parsed.error !== 'NOT_JSON' && parsed.error !== 'EMPTY') {
+    // 平台明确说了原因（不存在/过期/需登录）——直接给出，不回退
+    return { error: new ChatImportError(`未能抓取 DeepSeek 分享内容：${parsed.error}`, '可确认链接在浏览器无痕窗口能否打开；需登录才能看的分享请手动复制内容') }
+  }
+  return { fallback: true } // NOT_JSON / EMPTY → 回退 HTML 通用提取
+}
+
 // ─── 对外入口 ────────────────────────────────────────────────────────────────
 
 /**
@@ -419,6 +538,24 @@ export async function importChatLink(rawUrl: string): Promise<ImportLinkResult> 
     throw new ChatImportError('无法识别的链接：请粘贴 AI 平台的对话分享链接')
   }
   const { url, platform } = detected
+
+  // DeepSeek 分享页是 SPA 空壳，正文走公开 JSON 接口（免登录）——优先直取
+  const shareId = deepSeekShareId(url)
+  if (platform.id === 'deepseek' && shareId) {
+    const result = await tryDeepSeekShareJson(url.href, shareId)
+    if ('error' in result) throw result.error
+    if ('conversation' in result) {
+      return {
+        url: url.href,
+        platform,
+        markdown: conversationToMarkdown(result.conversation, platform),
+        messageCount: result.conversation.messages.length,
+        via: result.via,
+      }
+    }
+    // fallback: JSON 不可用（反爬/接口变化）→ 走 HTML 通用提取
+  }
+
   const page = await fetchChatPageHtml(url.href)
   const conv = extractConversation(page.html, platform.id)
   if (!conv || conv.messages.length === 0) {
