@@ -1,6 +1,6 @@
 # MarkDoc
 
-> 把 ChatGPT / DeepSeek / Kimi / 豆包等 AI 的回答（或任意 Markdown）粘贴进去，一键导出排版规范的 Word（.docx）与 PDF。LaTeX 公式在 Word 中是原生可编辑的 OMML 公式，PDF 为文字可选中/可搜索/可复制的矢量真文本 PDF。所有转换在浏览器本地完成，无需登录，内容不上传服务器。
+> 把 ChatGPT / DeepSeek / Kimi / 豆包等 AI 的回答（或任意 Markdown）粘贴进去，一键导出排版规范的 Word（.docx）与 PDF。LaTeX 公式在 Word 中是原生可编辑的 OMML 公式，PDF 为文字可选中/可搜索/可复制的矢量真文本 PDF。转换在浏览器本地完成，内容不上传服务器；匿名可试用，注册登录后云端历史随账号保存。
 
 ## 主要能力
 
