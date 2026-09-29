@@ -12,7 +12,6 @@
 import zlib from 'zlib'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync, statSync, copyFileSync, rmSync, rmdirSync } from 'fs'
 import { join, dirname } from 'path'
-import { decodeWoff } from '../../extension/src/lib/woff.js'
 
 /** TTF（sfnt）→ WOFF v1 字节 */
 export function ttfToWoff(ttf) {
@@ -73,10 +72,78 @@ export function ttfToWoff(ttf) {
   return out
 }
 
+/**
+ * Node 侧 WOFF 解码（roundtrip 校验用）。
+ *
+ * 逻辑与 extension/src/lib/woff.js 完全一致，但解压用 zlib.inflateRawSync：
+ * 那份实现是浏览器运行时解码器，依赖 DecompressionStream('deflate-raw')——
+ * 浏览器全支持，Node 18 的该 API 不认 'deflate-raw'（Node 21 才加入），
+ * 在 CI 构建里直接抛 ERR_INVALID_ARG_VALUE（2026-09-29 部署事故根因）。
+ */
+function decodeWoffNode(woff) {
+  const view = new DataView(woff.buffer, woff.byteOffset, woff.byteLength)
+  if (view.getUint32(0) !== 0x774f4646) throw new Error('not a WOFF file')
+  const flavor = view.getUint32(4)
+  const numTables = view.getUint16(12)
+
+  const entries = []
+  for (let i = 0; i < numTables; i++) {
+    const off = 44 + i * 20
+    entries.push({
+      tag: String.fromCharCode(woff[off], woff[off + 1], woff[off + 2], woff[off + 3]),
+      offset: view.getUint32(off + 4),
+      compLength: view.getUint32(off + 8),
+      origLength: view.getUint32(off + 12),
+      checksum: view.getUint32(off + 16),
+    })
+  }
+  entries.sort((a, b) => (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0))
+
+  const dirSize = 12 + 16 * numTables
+  const padded = []
+  let bodySize = 0
+  for (const entry of entries) {
+    const raw = woff.subarray(entry.offset, entry.offset + entry.compLength)
+    const data = entry.compLength < entry.origLength
+      ? zlib.inflateRawSync(raw)
+      : raw.slice()
+    if (data.length !== entry.origLength) {
+      throw new Error(`woff table ${entry.tag}: size mismatch ${data.length} != ${entry.origLength}`)
+    }
+    const pad = (4 - (data.length % 4)) % 4
+    padded.push({ entry, data, pad })
+    bodySize += data.length + pad
+  }
+
+  const entrySelector = Math.max(0, Math.floor(Math.log2(numTables)))
+  const searchRange = 2 ** entrySelector * 16
+  const rangeShift = numTables * 16 - searchRange
+
+  const out = new Uint8Array(dirSize + bodySize)
+  const ov = new DataView(out.buffer)
+  ov.setUint32(0, flavor)
+  ov.setUint16(4, numTables)
+  ov.setUint16(6, searchRange)
+  ov.setUint16(8, entrySelector)
+  ov.setUint16(10, rangeShift)
+
+  let bodyOff = dirSize
+  padded.forEach(({ entry, data, pad }, i) => {
+    const dirOff = 12 + i * 16
+    for (let c = 0; c < 4; c++) out[dirOff + c] = entry.tag.charCodeAt(c)
+    ov.setUint32(dirOff + 4, entry.checksum)
+    ov.setUint32(dirOff + 8, bodyOff)
+    ov.setUint32(dirOff + 12, data.length)
+    out.set(data, bodyOff)
+    bodyOff += data.length + pad
+  })
+  return out
+}
+
 /** roundtrip 校验：解回的 sfnt 逐表内容必须与原始 TTF 完全一致 */
 async function verifyRoundtrip(ttfPath, woff, rel) {
   const orig = new Uint8Array(readFileSync(ttfPath))
-  const decoded = await decodeWoff(woff)
+  const decoded = decodeWoffNode(woff)
   const tablesOf = (font) => {
     const v = new DataView(font.buffer, font.byteOffset, font.byteLength)
     const n = v.getUint16(4)
