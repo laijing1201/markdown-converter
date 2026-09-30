@@ -1,6 +1,6 @@
 # MarkDoc
 
-> 把 ChatGPT / DeepSeek / Kimi / 豆包等 AI 的回答（或任意 Markdown）粘贴进去，一键导出排版规范的 Word（.docx）与 PDF。LaTeX 公式在 Word 中是原生可编辑的 OMML 公式，PDF 为文字可选中/可搜索/可复制的矢量真文本 PDF。转换在浏览器本地完成，内容不上传服务器；匿名可试用，注册登录后云端历史随账号保存。
+> 把 ChatGPT / DeepSeek / Kimi / 豆包等 AI 的回答（或任意 Markdown）粘贴进去，一键导出排版规范的 Word（.docx）与 PDF。LaTeX 公式在 Word 中是原生可编辑的 OMML 公式，PDF 为文字可选中/可搜索/可复制的矢量真文本 PDF。转换在浏览器本地完成，内容不上传服务器；匿名用户可免费完整试用 1 次，注册登录后云端历史随账号保存、导出不限次。
 
 ## 主要能力
 
@@ -15,7 +15,9 @@
 
 ## 使用方式
 
-- 在线版（无需安装、无需登录）：https://laijing1201.github.io/markdown-converter/
+- 在线版（无需安装）：https://laijing1201.github.io/markdown-converter/
+- 登录入口：https://laijing1201.github.io/markdown-converter/login.html （应用内登录弹窗的静态跳转页）
+- 注册入口：https://laijing1201.github.io/markdown-converter/register.html （应用内注册弹窗的静态跳转页）
 - 浏览器扩展：在 ChatGPT / DeepSeek 等 AI 页面内直接导出回答为 Word / PDF
 - 桌面版（Electron）：支持本地 Markdown 打开/保存
 

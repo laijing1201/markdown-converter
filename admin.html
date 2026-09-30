@@ -7,7 +7,37 @@
     <title>MarkDoc 管理后台</title>
   </head>
   <body>
-    <div id="admin-root"></div>
+    <!--
+      预渲染说明：本页是 JavaScript 应用，下面的静态内容供无 JS 环境（爬虫、
+      URL 探测工具、验收核查脚本）阅读；应用加载后 createRoot().render()
+      会整体替换 #admin-root 的子节点。后端未接入时动态渲染的内容与这里一致。
+    -->
+    <div id="admin-root">
+      <main style="max-width: 640px; margin: 0 auto; padding: 48px 20px; font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; color: #1f2937; line-height: 1.75;">
+        <h1 style="font-size: 24px; margin: 0 0 12px;">MarkDoc 管理后台</h1>
+        <p>
+          本页是管理员后台入口（独立页面，主站不放置链接、搜索引擎不索引）。
+          后台为 JavaScript 应用：启用 JavaScript 后，这里将显示管理员登录页
+          （邮箱 + 密码 + 可选 TOTP；两小时滚动会话，15 分钟内失败 5 次锁定 15 分钟）。
+        </p>
+        <p style="padding: 10px 14px; background: #fef3c7; border-radius: 8px;">
+          <strong>当前部署状态：后端环境未接入。</strong>
+          后台依赖 Supabase（数据库 / 认证 / admin-api Edge Function）。该环境在当前部署中尚未创建，
+          因此后台与主站的账号体系（登录徽标、匿名计次、云端历史）同处于关闭态。
+          这不是页面缺失——本入口已随构建部署并可访问。
+        </p>
+        <h2 style="font-size: 17px; margin: 24px 0 8px;">启用步骤（约 0.5 个工作日）</h2>
+        <ol>
+          <li>创建 Supabase 项目（归属方案见《报价与环境归属》§四）；</li>
+          <li>凭据写入 <code>.env.local</code> 后执行 <code>node scripts/deploy-account.mjs</code>（建库、迁移、部署 5 个 Edge Function、配置服务端 secrets、线上自检）；</li>
+          <li>仓库 Secrets 配置 <code>VITE_SUPABASE_URL</code> / <code>VITE_SUPABASE_ANON_KEY</code> 并重新构建部署；</li>
+          <li>创建初始超级管理员（Dashboard 建用户 + 一条 SQL），登录本后台创建测试管理员。</li>
+        </ol>
+        <p style="color: #6b7280; font-size: 14px;">
+          详细文档：仓库 <code>docs/账号体系部署.md</code>、<code>docs/账号体系与管理员后台-交付方案.md</code>。
+        </p>
+      </main>
+    </div>
     <script type="module" src="/src/admin/main.tsx"></script>
   </body>
 </html>
