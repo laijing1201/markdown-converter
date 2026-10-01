@@ -63,8 +63,8 @@
 
 ## 6. 发布材料
 
-- [x] `docs/extension-privacy.md`（隐私政策）
-- [x] `docs/store-listing.md`（商店文案 + 权限说明）
+- [x] `docs/guides/extension-privacy.md`（隐私政策）
+- [x] `docs/guides/store-listing.md`（商店文案 + 权限说明）
 - [ ] 商店截图（1280×800，≥1 张）
 - [ ] 商店小宣传图（440×280）
 - [x] 图标 16/32/48/128

@@ -1,6 +1,6 @@
 # Chrome Web Store 发布素材 — MarkDoc 扩展
 
-> 提交前请对照 `docs/extension-release-checklist.md`，全部 Gate 通过后再上传。
+> 提交前请对照 `docs/guides/extension-release-checklist.md`，全部 Gate 通过后再上传。
 
 ## 名称（≤45 字符）
 
@@ -69,7 +69,7 @@ MarkDoc 把 AI 对话变成排版专业的文档。
 - ❌ 不收集位置 / 网络历史 / 浏览活动
 - ❌ 不收集网站内容？（否 — 仅在你主动点击导出时读取当前页面对话，且不离开设备）
 - ❌ 不出售数据 / 不用于无关用途 / 不转移给第三方
-- ✅ 隐私政策 URL：https://github.com/laijing1201/markdown-converter/blob/main/docs/extension-privacy.md
+- ✅ 隐私政策 URL：https://github.com/laijing1201/markdown-converter/blob/main/docs/guides/extension-privacy.md
 
 ## 上传资产清单
 

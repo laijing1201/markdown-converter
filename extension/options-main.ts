@@ -91,7 +91,7 @@ async function main(): Promise<void> {
   // 隐私说明（仓库 docs）
   $('link-privacy').addEventListener('click', (e) => {
     e.preventDefault()
-    chrome.tabs.create({ url: 'https://github.com/laijing1201/markdown-converter/blob/main/docs/extension-privacy.md' })
+    chrome.tabs.create({ url: 'https://github.com/laijing1201/markdown-converter/blob/main/docs/guides/extension-privacy.md' })
   })
 }
 

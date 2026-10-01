@@ -46,7 +46,7 @@ const PROJECT_REF = (URL.match(/https:\/\/([a-z0-9]+)\.supabase\.co/i) ?? [])[1]
 console.log('═══ MarkDoc 账号体系部署 ═══')
 for (const [k, v] of [['SUPABASE_ACCESS_TOKEN', ACCESS_TOKEN], ['VITE_SUPABASE_URL', URL], ['VITE_SUPABASE_ANON_KEY', ANON_KEY]]) {
   if (!v) {
-    console.error(`✗ 缺少 ${k}。获取方式见 docs/账号体系部署.md §1；可写入 .env.local（不进 git）。`)
+    console.error(`✗ 缺少 ${k}。获取方式见 docs/guides/账号体系部署.md §1；可写入 .env.local（不进 git）。`)
     process.exit(1)
   }
   console.log(`✓ ${k} = ${k === 'SUPABASE_ACCESS_TOKEN' || k === 'VITE_SUPABASE_ANON_KEY' ? v.slice(0, 8) + '…' : v}`)

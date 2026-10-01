@@ -8,7 +8,7 @@
  * 5. 最近导出结果（诊断信息用，不含内容）；
  * 6. TemplateStorage 统一接口。
  *
- * 隐私（docs/extension-privacy.md）：临时导入区保存聊天正文，30 分钟 TTL
+ * 隐私（docs/guides/extension-privacy.md）：临时导入区保存聊天正文，30 分钟 TTL
  * + 一次性消费 + 启动清扫；其余键全部只存结构信息与设置。
  */
 
