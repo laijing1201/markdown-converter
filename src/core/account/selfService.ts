@@ -1,5 +1,6 @@
 import { getSupabase } from './client'
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config'
+import { platform } from '../../platform'
 
 /**
  * 账号自助服务（注销 / 数据导出）—— 走 account-service Edge Function。
@@ -25,12 +26,8 @@ async function callAccountService<T>(action: string, body?: Record<string, unkno
 export async function exportAccountData(): Promise<void> {
   const bundle = await callAccountService<Record<string, unknown>>('export')
   const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `markdoc-账号数据导出-${new Date().toISOString().slice(0, 10)}.json`
-  a.click()
-  URL.revokeObjectURL(url)
+  // 走平台层：浏览器 = 下载，安卓壳 = 写缓存 + 系统分享面板
+  await platform.saveOrDownload(blob, `markdoc-账号数据导出-${new Date().toISOString().slice(0, 10)}.json`)
 }
 
 /** 注销账号：需输入邮箱二次确认；服务端删除 auth.users（级联删除云端历史） */

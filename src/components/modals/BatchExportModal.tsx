@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { saveAs } from 'file-saver'
+import { platform } from '../../platform'
 import {
   batchConvertToDocxZip,
   readBatchFiles,
@@ -80,7 +80,8 @@ export default function BatchExportModal({ settings, templateLabel, onToast, onC
 
   const handleDownload = useCallback(() => {
     if (!zipBlob) return
-    saveAs(zipBlob, `MarkDoc批量导出-${new Date().toISOString().slice(0, 10)}.zip`)
+    // 走平台层：浏览器 = 下载，安卓壳 = 写缓存 + 系统分享面板
+    void platform.saveOrDownload(zipBlob, `MarkDoc批量导出-${new Date().toISOString().slice(0, 10)}.zip`)
   }, [zipBlob])
 
   const okOf = (r: BatchItemResult) =>

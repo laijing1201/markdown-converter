@@ -6,6 +6,8 @@
  * 不是预估值 —— 「成功」= 已转为 Word 原生 OMML 公式，双击即可编辑。
  */
 
+import { platform } from '../../platform'
+
 export interface ExportQualityReport {
   durationMs: number
   mathTotal: number
@@ -77,12 +79,8 @@ export default function ExportReportModal({ report, onClose }: ExportReportModal
       ? JSON.stringify({ generatedAt: new Date().toISOString(), ...report }, null, 2)
       : reportToText(report)
     const blob = new Blob([content], { type: fmt === 'json' ? 'application/json' : 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${reportFileStem()}.${fmt}`
-    a.click()
-    URL.revokeObjectURL(url)
+    // 走平台层：浏览器 = 下载，安卓壳 = 写缓存 + 系统分享面板
+    void platform.saveOrDownload(blob, `${reportFileStem()}.${fmt}`)
   }
 
   return (

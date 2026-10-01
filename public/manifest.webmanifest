@@ -1,0 +1,33 @@
+{
+  "name": "MarkDoc - AI 回答转 Word / PDF",
+  "short_name": "MarkDoc",
+  "description": "把 AI 回答一键变成排版好的 Word / PDF：LaTeX 公式原生可编辑、三线表、矢量真文本 PDF，转换在浏览器本地完成。",
+  "id": "markdoc-web",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "lang": "zh-CN",
+  "background_color": "#f9fafb",
+  "theme_color": "#2563eb",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "导出 Word",
+      "short_name": "Word",
+      "url": "./?action=export-docx",
+      "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "导出 PDF",
+      "short_name": "PDF",
+      "url": "./?action=export-pdf",
+      "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

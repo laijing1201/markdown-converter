@@ -8,6 +8,12 @@
       content="把 ChatGPT / DeepSeek / Kimi 等 AI 的回答一键变成排版好的 Word 和 PDF：LaTeX 公式在 Word 中原生可编辑、在 PDF 中矢量清晰，表格、代码、Mermaid 图表完整保留，PDF 文字可选中可搜索；转换在浏览器本地完成，内容不上传服务器。匿名可免费试用 1 次，注册登录后云端历史随账号保存。"
     />
     <meta name="theme-color" content="#2563eb" />
+    <!-- PWA：安卓 Chrome「添加到主屏幕」即得全屏 App（同一套代码，功能与在线版完全一致） -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="MarkDoc" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="MarkDoc" />
     <meta property="og:title" content="MarkDoc - 把 AI 回答一键变成排版好的 Word / PDF" />
@@ -19,7 +25,7 @@
     <meta property="og:image" content="https://laijing1201.github.io/markdown-converter/icon-v3.png" />
     <meta name="twitter:card" content="summary" />
     <link rel="canonical" href="https://laijing1201.github.io/markdown-converter/" />
-    <link rel="icon" type="image/png" href="./icon-v3.png" />
+    <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <title>MarkDoc - 把 AI 回答一键变成排版好的 Word / PDF</title>
     <script type="application/ld+json">
       {
@@ -74,9 +80,10 @@
           <li>右侧实时预览排版效果，选择模板；</li>
           <li>点击「导出 Word」或「导出 PDF」下载文档。</li>
         </ol>
-        <h2 style="font-size: 19px; margin: 28px 0 10px;">三种使用方式</h2>
+        <h2 style="font-size: 19px; margin: 28px 0 10px;">四种使用方式</h2>
         <ul>
           <li><strong>在线版</strong>：浏览器直接使用，无需安装（本页面）；</li>
+          <li><strong>安卓端</strong>：同一套代码、功能全同步——手机浏览器「添加到主屏幕」即得全屏 App，或安装 APK；</li>
           <li><strong>桌面版</strong>：Electron 桌面应用，支持本地文件打开/保存；</li>
           <li><strong>浏览器扩展</strong>：在 ChatGPT / DeepSeek 页面内直接把回答导出为 Word / PDF。</li>
         </ul>

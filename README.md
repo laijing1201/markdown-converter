@@ -4,11 +4,12 @@ MarkDoc 是一个基于 React + TypeScript + Vite 的在线文档工具：把 **
 
 Markdown 是底层技术，不是使用门槛：普通用户不需要懂 Markdown，粘贴即可。
 
-## 🌐 三种使用方式
+## 🌐 四种使用方式
 
 | 入口 | 适合谁 | 说明 |
 |------|--------|------|
 | **MarkDoc Web（在线版）** | 所有人 | **无需安装、无需登录**，打开即用；全部转换在浏览器本地完成 |
+| **MarkDoc Android（安卓端）** | 手机 / 平板用户 | **同一套代码，功能全同步**：PWA「添加到主屏幕」免构建即用，或用 Capacitor 出 APK（见 [docs/android.md](docs/android.md)） |
 | **MarkDoc Desktop（桌面增强版）** | 频繁处理本地文档的用户 | 拥有 Web 全部核心能力，额外提供：原生文件选择器、本地 Markdown 打开/保存、桌面工作流 |
 | **MarkDoc Extension（浏览器扩展）** | ChatGPT / DeepSeek 重度用户 | 在 AI 页面直接把回答导出为 Word / PDF，或发送到 MarkDoc Web 中编辑 |
 
@@ -47,21 +48,22 @@ Markdown 是底层技术，不是使用门槛：普通用户不需要懂 Markdow
 - 🔒 **隐私安全**：所有转换（含 PDF 生成的字体子集化）均在浏览器本地完成，内容不上传服务器
 - 🧩 **AI 内容修复**：一键修复 AI 对话复制到 Word 的格式断层——公式乱码（\(\) 定界符转换、Word 线性公式 ∑_(i=1)^n▒x_i → LaTeX、裸 egin{cases} 环境包裹）、Mermaid 图表围栏重建、全角/零宽字符清理，附 UTF-8/GBK/Big5 编码深度解码；修复后可一键导出 Word
 
-## 技术栈与三端架构
+## 技术栈与四端架构
 
 ```text
                     MarkDoc Core（src/core/*）
                          │
-       ┌─────────────────┼─────────────────┐
-       ▼                 ▼                 ▼
-   MarkDoc Web      MarkDoc Desktop    MarkDoc Extension
-   GitHub Pages        Electron        Chrome / Edge
-  （在线零安装）     （桌面增强）        （AI 页面快捷入口）
+       ┌─────────────────┼─────────────────┬──────────────┐
+       ▼                 ▼                 ▼              ▼
+   MarkDoc Web      MarkDoc Desktop    MarkDoc Extension  MarkDoc Android
+   GitHub Pages        Electron        Chrome / Edge       Capacitor
+  （在线零安装+PWA）   （桌面增强）      （AI 页面快捷入口）  （手机全功能，PWA/APK）
 ```
 
-- 三端共用同一条转换管线：Markdown 解析 → 预览 DOM → DOCX 导出（OMML 公式）→ 真文本 PDF（pdf-lib + harfbuzz 子集字体）；扩展导出引擎复用同一套 `buildDocxBlob` / `buildPdf` Blob 入口，没有第二套导出实现
-- 平台差异收敛在 `src/platform/`（capabilities + adapter）：core 导出器只产出 Blob，「怎么保存」（浏览器下载 / Electron 原生另存为）由平台层决定
+- 四端共用同一条转换管线：Markdown 解析 → 预览 DOM → DOCX 导出（OMML 公式）→ 真文本 PDF（pdf-lib + harfbuzz 子集字体）；扩展导出引擎复用同一套 `buildDocxBlob` / `buildPdf` Blob 入口，没有第二套导出实现
+- 平台差异收敛在 `src/platform/`（capabilities + adapter）：core 导出器只产出 Blob，「怎么保存」（浏览器下载 / Electron 原生另存为 / 安卓系统分享面板）由平台层决定
 - 桌面增强通过 `electron/preload.ts` 的 contextBridge 白名单暴露（打开本地 Markdown / 原生另存为），渲染进程与 Node 隔离
+- 安卓端用 Capacitor 复用同一 Web 构建产物（`npm run android:sync`），Web 端另带 PWA manifest + Service Worker（添加到主屏幕 / 离线壳），详见 [docs/android.md](docs/android.md)
 
 | 类别 | 技术 |
 |------|------|
@@ -75,7 +77,7 @@ Markdown 是底层技术，不是使用门槛：普通用户不需要懂 Markdow
 | PDF 生成 | pdf-lib + @pdf-lib/fontkit（真文本 PDF） |
 | PDF 分页引擎 | 浏览器实测 + 自研分页（`src/core/pdf/layout.ts`） |
 | PDF 字体子集 | harfbuzzjs（hb-subset.wasm） |
-| PDF 字体加载 | 构建期 TTF→WOFF 压缩（三端统一），运行时按需 fetch + Cache API 跨会话缓存（首屏零字体流量，部署体积约省 45%） |
+| PDF 字体加载 | 构建期 TTF→WOFF 压缩（四端统一），运行时按需 fetch + Cache API 跨会话缓存（首屏零字体流量，部署体积约省 45%） |
 | Mermaid/图片（PDF） | SVG → Canvas 3× 光栅嵌入 |
 | 流程图 | Mermaid |
 | 代码高亮 | highlight.js（common 常用语言子集，未收录语言降级为转义纯文本） |
@@ -91,6 +93,8 @@ npm run dev:web        # 纯 Web 开发模式
 npm run typecheck      # TypeScript 检查
 npm run build          # Web 生产构建（GitHub Pages 部署用），产物在 dist/
 npm run build:electron # 桌面版构建 + electron-builder 打包
+npm run android:sync   # 安卓：构建 Web + 同步进 android/（Capacitor）
+npm run android:apk    # 安卓：出 Debug APK（需 Android Studio/JDK 17，见 docs/android.md）
 npm test               # 全部单元测试（markdown / OMML / docx / PDF 管线 / Adapter / 扩展管线）
 npm run test:web:e2e   # Web E2E（真实浏览器，含 GitHub Pages 生产 base 模拟）
 npm run test:pdf:e2e   # PDF 导出 E2E（真实浏览器逐场景导出）
@@ -101,21 +105,27 @@ npm run test:pdf:visual # PDF 视觉回归（与 tests/pdf/baseline 逐像素对
 
 ```text
 src/
-  core/               # MarkDoc Core：与平台无关的全部业务（三端共用）
+  core/               # MarkDoc Core：与平台无关的全部业务（四端共用）
     markdown.ts       #   Markdown 管线（marked + 数学占位 + CJK 强调修复）
-    exporter.ts       #   DOCX 导出（buildDocxBlob，三端唯一实现）
+    exporter.ts       #   DOCX 导出（buildDocxBlob，四端唯一实现）
     omml.ts           #   LaTeX → MathML → OMML 原生公式
     templates.ts      #   模板 / DocSettings 单一数据源
     aiWordFix.ts      #   AI 深度修复 + 一键导出
     pdf/              #   真文本 PDF：layout（分页引擎）/ render / fonts / export
   components/         # React UI（编辑器 / 预览 / 工具栏 / 弹窗）
-  platform/           # 平台差异层（Web 下载 vs Electron 另存为）
-  styles/             # preview.css：三端共用的唯一排版样式
+  platform/           # 平台差异层（Web 下载 / Electron 另存为 / 安卓分享面板）
+  styles/             # preview.css：四端共用的唯一排版样式
 extension/            # 浏览器扩展：adapters / 提取 / UI / 导出引擎页
 electron/             # Electron 主进程 / preload（contextBridge 白名单）
+android/              # Capacitor 安卓壳（原生工程，Web 产物由 android:sync 同步进来）
+capacitor.config.ts   # 安卓壳配置（appId / webDir / androidScheme）
+assets/               # 安卓图标/启动图源图（@capacitor/assets 的输入）
 scripts/              # 测试与构建脚本（test-*.ts / lib/ 共用库）
 tests/                # PDF 视觉 baseline（入库）+ fixtures
-docs/                 # 专项文档（账号体系 / 导出支持 / 扩展发布等）
+docs/
+  guides/             # 技术文档（安卓构建 / 账号体系 / 导出支持 / 扩展发布等）
+  delivery/           # 商务与验收存档（报价 / 交付方案 / 验收回复）
+public/               # 静态资源（图标 / 字体源 / PWA manifest 与 SW / 登录注册静态页）
 ```
 
 ### GitHub Pages 部署
@@ -209,3 +219,20 @@ npm run package:extension # 打包发布 zip → artifacts/
 - 历史记录、拖放导入、自动保存等与 Web 一致
 
 构建：`npm run build:electron`（产物在 `release/`）。
+
+## MarkDoc Android（安卓端）
+
+与 Web 版**同一套代码、所有功能同步**：转换管线、三套模板、AI 对话链接导入、
+批量转换、账号体系与云端历史全部一致；界面自带手机布局（编辑 / 预览双 Tab）。
+
+两种形态：
+
+- **PWA（零构建，推荐普通用户）**：安卓 Chrome 打开线上站点 → 菜单 →
+  「添加到主屏幕」，即得全屏应用图标，支持离线启动（Service Worker 壳）
+- **APK（Capacitor，可分发/上架）**：`npm run android:sync` → `npm run android:apk`，
+  Debug APK 输出在 `android/app/build/outputs/apk/debug/`
+
+安卓特有的导出行为：Word / PDF / 批量 ZIP / 质量报告导出时弹出**系统分享面板**
+（保存到文件 = 下载，也可直接发微信 / 邮件）。完整构建与发布指南见
+[docs/android.md](docs/android.md)。
+

@@ -46,7 +46,8 @@ export function getDesktopApi(): MarkdocDesktopApi | null {
   return window.markdocDesktop ?? null
 }
 
-const WEB_CAPABILITIES: PlatformCapabilities = {
+/** Web / 安卓壳共用的能力面（安卓差异只在「怎么保存」，不在能力开关） */
+export const WEB_CAPABILITIES: PlatformCapabilities = {
   desktop: false,
   openLocalFile: false,
   nativeSave: false,

@@ -16,6 +16,7 @@
 ## 使用方式
 
 - 在线版（无需安装）：https://laijing1201.github.io/markdown-converter/
+- 安卓端：同一套代码、功能与在线版完全一致。手机浏览器打开在线版 → 菜单「添加到主屏幕」即得全屏 App（PWA）；也可用 Capacitor 构建 APK（仓库 android/ 目录）
 - 登录入口：https://laijing1201.github.io/markdown-converter/login.html （应用内登录弹窗的静态跳转页）
 - 注册入口：https://laijing1201.github.io/markdown-converter/register.html （应用内注册弹窗的静态跳转页）
 - 浏览器扩展：在 ChatGPT / DeepSeek 等 AI 页面内直接导出回答为 Word / PDF
