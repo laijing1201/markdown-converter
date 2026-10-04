@@ -59,11 +59,16 @@ export default function Toolbar({
   return (
     <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm transition-colors flex-wrap">
       {/* Title */}
-      <div className="mr-3 whitespace-nowrap">
-        <h1 className="text-base font-semibold text-gray-800 dark:text-gray-100 leading-tight">MarkDoc</h1>
-        <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight hidden sm:block">
-          AI 回答 → 排版好的 Word / PDF
-        </p>
+      <div className="mr-3 flex items-center gap-2 whitespace-nowrap">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 text-xs font-bold text-white shadow-sm">
+          M
+        </span>
+        <div className="leading-tight">
+          <h1 className="text-sm font-bold text-gray-800 dark:text-gray-100 tracking-tight">MarkDoc</h1>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight hidden sm:block">
+            AI 回答 → 排版好的 Word / PDF
+          </p>
+        </div>
       </div>
 
       {/* 快速模式：模板即点即换 */}
@@ -145,14 +150,14 @@ export default function Toolbar({
         <button
           onClick={onExportPdf}
           disabled={busy}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-md shadow-sm transition-colors disabled:opacity-60"
+          className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-sm font-semibold rounded-md shadow-sm transition-all disabled:opacity-60"
         >
           导出 PDF
         </button>
         <button
           onClick={onExportWord}
           disabled={busy}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-md shadow-sm transition-colors disabled:opacity-60"
+          className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-semibold rounded-md shadow-sm transition-all disabled:opacity-60"
         >
           导出 Word
         </button>

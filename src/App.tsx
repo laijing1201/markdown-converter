@@ -14,6 +14,7 @@ import AuthModal, { type AuthModalMode } from './components/modals/AuthModal'
 import ImportLinkModal from './components/modals/ImportLinkModal'
 import BatchExportModal from './components/modals/BatchExportModal'
 import AccountModal from './components/modals/AccountModal'
+import Landing from './components/Landing'
 import {
   accountEnabled,
   onAuthChange,
@@ -78,7 +79,7 @@ import {
   type CustomTemplate,
   type TemplateId,
 } from './core/templates'
-import { platform, capabilities } from './platform'
+import { platform, capabilities, isCapacitorNative } from './platform'
 
 const A4_KEY = 'markdoc.a4mode.v1'
 
@@ -193,6 +194,27 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const editorRef = useRef<EditorHandle>(null)
   const previewId = 'preview-container'
+
+  // ── 落地页：首次进入先看到产品介绍，点「立即体验」进入编辑器 ─────────────
+  // 直接跳过落地页的场景：扩展导入（#ext-import=）、Electron 桌面版、
+  // 安卓原生壳、自动化会话（web e2e 断言首屏即编辑器）
+  const [entered, setEntered] = useState(
+    () =>
+      window.location.hash.startsWith('#ext-import=') ||
+      capabilities.desktop ||
+      isCapacitorNative() ||
+      navigator.webdriver === true,
+  )
+  const [landingLeaving, setLandingLeaving] = useState(false)
+
+  const enterApp = useCallback(() => {
+    setLandingLeaving(true)
+    window.setTimeout(() => setEntered(true), 280)
+  }, [])
+
+  const handleLandingAuth = useCallback((mode: 'login' | 'register') => {
+    setAuthModal((m) => ({ ...m, open: true, mode, resume: null }))
+  }, [])
 
   /** 大文档性能：预览渲染与告警扫描使用延迟值，输入不被阻塞 */
   const deferredContent = useDeferredValue(markdownContent)
@@ -807,8 +829,62 @@ export default function App() {
     )
   ) : undefined
 
+  // AuthModal 与 Toast 提升为共享元素：落地页与编辑器两个分支都要渲染
+  const authModalEl = (
+    <AuthModal
+      open={authModal.open}
+      initialMode={authModal.mode}
+      banner={authModal.banner}
+      resumeTarget={authModal.resume}
+      onClose={() => setAuthModal((m) => ({ ...m, open: false }))}
+      onAuthed={handleAuthed}
+    />
+  )
+
+  const toastEl = toast ? (
+    <div
+      key={toast.id}
+      onClick={() => {
+        if (toast.diagnostics && navigator.clipboard?.writeText) {
+          void navigator.clipboard.writeText(toast.diagnostics).then(() => {
+            setToast({ id: Date.now(), icon: '📋', message: '诊断信息已复制到剪贴板' })
+          }).catch(() => setToast(null))
+        } else {
+          setToast(null)
+        }
+      }}
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] cursor-pointer bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl px-4 py-3 max-w-md animate-[toast-in_.2s_ease-out]"
+    >
+      <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
+        {toast.icon} {toast.message}
+      </p>
+      {toast.details && (
+        <ul className="mt-1.5 space-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+          {toast.details.map((d, i) => (
+            <li key={i}>· {d}</li>
+          ))}
+          {toast.details.length >= 4 && <li>…</li>}
+        </ul>
+      )}
+      {toast.diagnostics && (
+        <p className="mt-1 text-[11px] text-blue-500">点击复制诊断信息（详见浏览器控制台）</p>
+      )}
+    </div>
+  ) : null
+
+  // ── 落地页分支：功能介绍 + 立即体验；AuthModal 直接叠加在其上 ───────────
+  if (!entered) {
+    return (
+      <>
+        <Landing leaving={landingLeaving} onEnter={enterApp} onAuth={handleLandingAuth} />
+        {authModalEl}
+        {toastEl}
+      </>
+    )
+  }
+
   return (
-    <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900 transition-colors">
+    <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900 transition-colors app-fade-in">
       <Toolbar
         busy={busy}
         onExportWord={handleExportWord}
@@ -850,14 +926,7 @@ export default function App() {
       </div>
 
       {/* ── Modals ──────────────────────────────────────────────────── */}
-      <AuthModal
-        open={authModal.open}
-        initialMode={authModal.mode}
-        banner={authModal.banner}
-        resumeTarget={authModal.resume}
-        onClose={() => setAuthModal((m) => ({ ...m, open: false }))}
-        onAuthed={handleAuthed}
-      />
+      {authModalEl}
       {showDeepFix && (
         <DeepFixModal
           content={markdownContent}
@@ -1054,7 +1123,7 @@ export default function App() {
           {!markdownContent && (
             <div className="shrink-0 px-6 pt-8 pb-4 flex justify-center bg-gray-100 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
               <div className="text-center max-w-md pointer-events-auto">
-                <p className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1.5">
+                <p className="text-lg font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent mb-1.5">
                   把 AI 回答一键变成排版好的 Word / PDF
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
@@ -1063,7 +1132,7 @@ export default function App() {
                 <div className="flex items-center justify-center gap-2 flex-wrap">
                   <button
                     onClick={() => void handleClipboardPaste()}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-md shadow-sm transition-colors"
+                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-semibold rounded-md shadow-sm transition-all"
                   >
                     📋 从剪贴板粘贴
                   </button>
@@ -1187,36 +1256,7 @@ export default function App() {
       </div>
 
       {/* ── Toast ─────────────────────────────────────────────────────── */}
-      {toast && (
-        <div
-          key={toast.id}
-          onClick={() => {
-            if (toast.diagnostics && navigator.clipboard?.writeText) {
-              void navigator.clipboard.writeText(toast.diagnostics).then(() => {
-                setToast({ id: Date.now(), icon: '📋', message: '诊断信息已复制到剪贴板' })
-              }).catch(() => setToast(null))
-            } else {
-              setToast(null)
-            }
-          }}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] cursor-pointer bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl px-4 py-3 max-w-md animate-[toast-in_.2s_ease-out]"
-        >
-          <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
-            {toast.icon} {toast.message}
-          </p>
-          {toast.details && (
-            <ul className="mt-1.5 space-y-0.5 text-xs text-gray-500 dark:text-gray-400">
-              {toast.details.map((d, i) => (
-                <li key={i}>· {d}</li>
-              ))}
-              {toast.details.length >= 4 && <li>…</li>}
-            </ul>
-          )}
-          {toast.diagnostics && (
-            <p className="mt-1 text-[11px] text-blue-500">点击复制诊断信息（详见浏览器控制台）</p>
-          )}
-        </div>
-      )}
+      {toastEl}
     </div>
   )
 }

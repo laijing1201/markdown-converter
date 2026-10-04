@@ -25,7 +25,62 @@
   }
 }
 
+/* ── 落地页 / 应用切换动画 ──────────────────────────────────────────────── */
+
+@keyframes app-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.app-fade-in {
+  animation: app-fade-in 0.35s ease-out both;
+}
+
+/* 落地页漂浮特性徽标 */
+@keyframes landing-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.landing-float {
+  animation: landing-float 5s ease-in-out infinite;
+}
+
+.landing-float-delay {
+  animation: landing-float 5s ease-in-out 1.2s infinite;
+}
+
+/* 落地页占满视口时不出现双重滚动条 */
+.landing-root {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-float,
+  .landing-float-delay {
+    animation: none;
+  }
+  .app-fade-in {
+    animation: none;
+  }
+}
+
 /* ── Misc ───────────────────────────────────────────────────────────────── */
+
+/* 选中文字：与主题渐变同族的紫色高亮（亮暗主题通用） */
+::selection {
+  background-color: rgba(139, 92, 246, 0.32);
+}
 
 .mermaid-error {
   @apply border border-red-300 dark:border-red-700;
