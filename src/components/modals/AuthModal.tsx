@@ -148,7 +148,8 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
 
   const handleLogin = async () => {
     setError('')
-    if (!validateEmail(email)) return setError('邮箱格式不正确')
+    const emailErr = validateEmail(email)
+    if (emailErr) return setError(emailErr)
     if (!password) return setError('请输入密码')
     setBusy(true)
     const r = await signIn(email, password)
@@ -159,7 +160,8 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
   const handleRegister = async () => {
     setError('')
     setInfo('')
-    if (!validateEmail(email)) return setError('邮箱格式不正确')
+    const emailErr = validateEmail(email)
+    if (emailErr) return setError(emailErr)
     const pwErr = validatePassword(password)
     if (pwErr) return setError(pwErr)
     if (!consent) return setError('请先阅读并勾选同意《隐私政策》与《服务条款》')
@@ -189,7 +191,8 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
   const handleReset = async () => {
     setError('')
     setInfo('')
-    if (!validateEmail(email)) return setError('邮箱格式不正确')
+    const emailErr = validateEmail(email)
+    if (emailErr) return setError(emailErr)
     setBusy(true)
     const r = await sendPasswordReset(email)
     setBusy(false)
