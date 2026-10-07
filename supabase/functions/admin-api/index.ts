@@ -93,6 +93,7 @@ interface AdminContext {
   role: string
   permissions: Set<string>
   sessionId: string
+  mustChangePassword: boolean
 }
 
 async function authenticate(req: Request, sb: ReturnType<typeof serviceClient>): Promise<AdminContext | null> {
@@ -104,12 +105,12 @@ async function authenticate(req: Request, sb: ReturnType<typeof serviceClient>):
     .eq('token_hash', tokenHash)
     .maybeSingle()
   if (!session || session.revoked_at || new Date(session.expires_at).getTime() < Date.now()) return null
-  const { data: admin } = await sb.from('admin_users').select('id, role_key, is_active').eq('id', session.admin_id).maybeSingle()
+  const { data: admin } = await sb.from('admin_users').select('id, role_key, is_active, must_change_password').eq('id', session.admin_id).maybeSingle()
   if (!admin || !admin.is_active) return null
   const { data: perms } = await sb.from('admin_role_permissions').select('permission_key').eq('role_key', admin.role_key)
   // 2 小时滚动续期：活跃会话自动延长，长期闲置自动过期
   await sb.from('admin_sessions').update({ last_seen_at: new Date().toISOString(), expires_at: new Date(Date.now() + SESSION_TTL_MS).toISOString() }).eq('id', session.id)
-  return { sb, adminId: admin.id, role: admin.role_key, permissions: new Set((perms ?? []).map((p) => p.permission_key)), sessionId: session.id }
+  return { sb, adminId: admin.id, role: admin.role_key, permissions: new Set((perms ?? []).map((p) => p.permission_key)), sessionId: session.id, mustChangePassword: admin.must_change_password }
 }
 
 async function audit(ctx: AdminContext | null, action: string, target?: string, detail?: unknown, req?: Request): Promise<void> {
@@ -150,7 +151,8 @@ async function login(sb: ReturnType<typeof serviceClient>, params: { email?: str
   if (signInData.user.email_confirmed_at == null) return fail('email_unconfirmed')
 
   // 2FA：已注册 MFA 的管理员必须通过 TOTP 校验
-  const { data: factors } = await asUser.auth.mfa.listFactors()
+  const { data: factors, error: factorsError } = await asUser.auth.mfa.listFactors()
+  if (factorsError) return fail('无法检查两步验证，请重试', 503)
   if (factors?.totp?.length) {
     if (!params.totp) {
       await asUser.auth.signOut({ scope: 'global' })
@@ -175,13 +177,14 @@ async function login(sb: ReturnType<typeof serviceClient>, params: { email?: str
 
   const { data: perms } = await sb.from('admin_role_permissions').select('permission_key').eq('role_key', admin.role_key)
   const token = crypto.randomUUID() + crypto.randomUUID()
-  await sb.from('admin_sessions').insert({
+  const { error: sessionError } = await sb.from('admin_sessions').insert({
     admin_id: admin.id,
     token_hash: await sha256Hex(token),
     expires_at: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
   })
+  if (sessionError) return json({ error: '无法创建管理员会话' }, 500)
   await sb.from('login_logs').insert({ user_id: admin.id, email_hash: eh, ip_hash: await ipHash(req), success: true, reason: 'admin_login' })
-  const ctx: AdminContext = { sb, adminId: admin.id, role: admin.role_key, permissions: new Set((perms ?? []).map((p) => p.permission_key)), sessionId: 'login' }
+  const ctx: AdminContext = { sb, adminId: admin.id, role: admin.role_key, permissions: new Set((perms ?? []).map((p) => p.permission_key)), sessionId: 'login', mustChangePassword: admin.must_change_password }
   await audit(ctx, 'admin.login', admin.id, { role: admin.role_key }, req)
   return json({
     token,
@@ -308,7 +311,22 @@ Deno.serve(async (req: Request) => {
     await audit(ctx, 'admin.logout', undefined, undefined, req)
     return json({ ok: true })
   }
-  if (action === 'me') return json({ adminId: ctx.adminId, role: ctx.role, permissions: [...ctx.permissions] })
+  if (action === 'me') return json({ adminId: ctx.adminId, role: ctx.role, permissions: [...ctx.permissions], mustChangePassword: ctx.mustChangePassword })
+  if (action === 'password.change') {
+    const password = typeof params.password === 'string' ? params.password : ''
+    if (password.length < 12 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      return json({ error: '新密码至少 12 位，包含字母和数字' }, 400)
+    }
+    const { error: passwordError } = await sb.auth.admin.updateUserById(ctx.adminId, { password })
+    if (passwordError) return json({ error: passwordError.message }, 400)
+    const { error: revokeError } = await sb.rpc('revoke_user_sessions', { p_user_id: ctx.adminId })
+    if (revokeError) return json({ error: '密码已更新，但会话撤销失败，请重新登录后重试' }, 500)
+    const { error: flagError } = await sb.from('admin_users').update({ must_change_password: false }).eq('id', ctx.adminId)
+    if (flagError) return json({ error: '密码已更新，但状态更新失败，请重新登录后重试' }, 500)
+    await audit(ctx, 'admin.password_changed', ctx.adminId, undefined, req)
+    return json({ ok: true })
+  }
+  if (ctx.mustChangePassword) return json({ error: '请先修改初始密码', mustChangePassword: true }, 403)
 
   const required = ACTION_PERMISSIONS[action]
   if (required === undefined) return json({ error: `未知动作：${action}` }, 404)
@@ -346,14 +364,20 @@ Deno.serve(async (req: Request) => {
 
     case 'user.setStatus': {
       const disabled = params.disabled === true
-      await ctx.sb.from('profiles').update({ status: disabled ? 'disabled' : 'active' }).eq('id', String(params.id))
-      await ctx.sb.auth.admin.updateUserById(String(params.id), { ban_duration: disabled ? '876000h' : 'none' })
-      if (disabled) await ctx.sb.auth.admin.signOut(String(params.id)) // 禁用即强制下线
+      const { error: authError } = await ctx.sb.auth.admin.updateUserById(String(params.id), { ban_duration: disabled ? '876000h' : 'none' })
+      if (authError) return json({ error: authError.message }, 500)
+      const { error: profileError } = await ctx.sb.from('profiles').update({ status: disabled ? 'disabled' : 'active' }).eq('id', String(params.id))
+      if (profileError) return json({ error: '账号状态更新失败，请重试' }, 500)
+      if (disabled) {
+        const { error } = await ctx.sb.rpc('revoke_user_sessions', { p_user_id: String(params.id) })
+        if (error) return json({ error: '账号已禁用，但会话撤销失败，请重试' }, 500)
+      }
       await audit(ctx, disabled ? 'user.disable' : 'user.enable', String(params.id), undefined, req)
       return json({ ok: true })
     }
     case 'user.forceLogout': {
-      await ctx.sb.auth.admin.signOut(String(params.id))
+      const { error } = await ctx.sb.rpc('revoke_user_sessions', { p_user_id: String(params.id) })
+      if (error) return json({ error: '会话撤销失败，请重试' }, 500)
       await audit(ctx, 'user.force_logout', String(params.id), undefined, req)
       return json({ ok: true })
     }

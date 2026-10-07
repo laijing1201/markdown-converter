@@ -15,6 +15,7 @@ export type TicketResult =
   | { ok: false; reason: 'QUOTA_EXCEEDED' | 'DISABLED' | 'AUTH_REQUIRED' | 'NETWORK' | 'MAINTENANCE' | 'SERVER'; message: string; remaining?: Remaining }
 
 export interface Remaining {
+  userLeft?: number | null
   deviceLeft?: number | null
   ipLeft?: number | null
 }

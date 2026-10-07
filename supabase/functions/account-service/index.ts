@@ -17,6 +17,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders, json } from '../_shared/cors.ts'
+import { getActiveUser } from '../_shared/activeUser.ts'
 
 function serviceClient() {
   return createClient(
@@ -26,25 +27,20 @@ function serviceClient() {
   )
 }
 
-async function getUser(req: Request, sb: ReturnType<typeof serviceClient>) {
-  const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim()
-  if (!token) return null
-  const { data } = await sb.auth.getUser(token)
-  return data.user ?? null
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
   const sb = serviceClient()
-  const user = await getUser(req, sb)
+  const user = await getActiveUser(req)
   if (!user) return json({ error: '未登录' }, 401)
 
-  let action = ''
+  let body: { action?: string; confirm?: string }
   try {
-    action = (await req.json()).action ?? ''
-  } catch { /* default */ }
+    body = await req.json()
+    if (!body || typeof body !== 'object') throw new Error('Invalid body')
+  } catch { return json({ error: '请求体不是合法 JSON' }, 400) }
+  const action = body.action ?? ''
 
   if (action === 'export') {
     // 本人数据聚合（视图 security_invoker + 用户 JWT 限定到本人）
@@ -64,9 +60,8 @@ Deno.serve(async (req: Request) => {
 
   if (action === 'delete') {
     // 注销前校验：要求请求体带 confirm: email，防误删（前端有二次确认弹窗）
-    let confirm = ''
-    try { confirm = (await req.json()).confirm ?? '' } catch { /* ignore */ }
-    if (confirm !== user.email) return json({ error: '确认信息不匹配：请输入账号邮箱确认注销' }, 400)
+    const confirm = typeof body.confirm === 'string' ? body.confirm.trim().toLowerCase() : ''
+    if (!user.email || confirm !== user.email.toLowerCase()) return json({ error: '确认信息不匹配：请输入账号邮箱确认注销' }, 400)
 
     await sb.from('usage_logs').insert({ user_id: null, kind: 'user', source: 'web' })
       .then(() => undefined).catch(() => undefined) // 留痕失败不阻塞注销

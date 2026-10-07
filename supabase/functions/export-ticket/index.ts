@@ -18,6 +18,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders, json } from '../_shared/cors.ts'
+import { getActiveUser } from '../_shared/activeUser.ts'
 
 const TICKET_TTL_MS = 5 * 60 * 1000
 
@@ -44,11 +45,6 @@ async function issueTicket(subject: string, format: string, secret: string): Pro
   return `${payload}.${sig}`
 }
 
-interface QuotaInfo {
-  deviceLeft: number | null
-  ipLeft: number | null
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return json({ error: 'METHOD_NOT_ALLOWED' }, 405)
@@ -62,6 +58,7 @@ Deno.serve(async (req: Request) => {
   let body: { deviceId?: string; fingerprint?: string; format?: string; source?: string; checkOnly?: boolean }
   try {
     body = await req.json()
+    if (!body || typeof body !== 'object') throw new Error('Invalid body')
   } catch {
     return json({ error: 'BAD_REQUEST' }, 400)
   }
@@ -77,101 +74,32 @@ Deno.serve(async (req: Request) => {
     'unknown'
   const ipHash = (await sha256Hex(rawIp + ipPepper)).slice(0, 32)
 
-  // 系统配置
-  const { data: configRows } = await db.from('system_configs').select('key, value')
-  const cfg = new Map<string, unknown>((configRows ?? []).map((r) => [r.key, r.value]))
-  const freeFullUses = Number(cfg.get('free_full_uses') ?? 1)
-  const ipDailyExtra = Number(cfg.get('ip_daily_extra') ?? 3)
-  const registeredUnlimited = cfg.get('registered_unlimited') !== false
-  const maintenanceMode = cfg.get('maintenance_mode') === true
+  if (!checkOnly && !ticketSecret) return json({ error: 'SERVER_MISCONFIGURED', message: '服务端未配置票据密钥' }, 500)
 
-  if (maintenanceMode) return json({ error: 'MAINTENANCE', message: '系统维护中，请稍后再试' }, 503)
+  const hasAuth = Boolean(req.headers.get('Authorization'))
+  const user = hasAuth ? await getActiveUser(req) : null
+  if (hasAuth && !user) return json({ error: 'AUTH_REQUIRED', message: '会话已失效，请重新登录' }, 401)
+  const deviceId = typeof body.deviceId === 'string' ? body.deviceId.slice(0, 64) : ''
+  if (!user && !deviceId) return json({ error: 'BAD_REQUEST', message: '缺少设备标识' }, 400)
+  const fingerprintHash = typeof body.fingerprint === 'string'
+    ? (await sha256Hex(body.fingerprint + ipPepper)).slice(0, 32) : null
 
-  // ── 登录用户 ──────────────────────────────────────────────────────────────
-  const authHeader = req.headers.get('Authorization') ?? ''
-  if (authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7)
-    const { data: userData } = await db.auth.getUser(token)
-    const user = userData?.user
-    if (user) {
-      const { data: profile } = await db.from('profiles').select('status, must_change_password, export_count').eq('id', user.id).single()
-      if (!profile || profile.status === 'deleted') return json({ error: 'AUTH_REQUIRED' }, 401)
-      if (profile.status === 'disabled') return json({ error: 'DISABLED', message: '账号已被禁用，请联系管理员' }, 403)
-
-      if (!checkOnly) {
-        await db.from('usage_logs').insert({ user_id: user.id, ip_hash: ipHash, kind: 'user', format, source })
-        await db.from('profiles').update({ export_count: (profile.export_count ?? 0) + 1, last_login_at: new Date().toISOString() }).eq('id', user.id)
-      }
-      const unlimited = registeredUnlimited
-      const ticket = checkOnly ? null : await issueTicket(`u:${user.id}`, format, ticketSecret)
-      return json({
-        ok: true,
-        ticket,
-        kind: 'user',
-        remaining: unlimited ? null : { userLeft: Math.max(0, 100 - (profile.export_count ?? 0)) },
-      })
-    }
-    // Token 无效 → 按匿名继续（前端会话过期场景）
-  }
-
-  // ── 匿名用户 ──────────────────────────────────────────────────────────────
-  const deviceId = (body.deviceId ?? '').slice(0, 64)
-  if (!deviceId) return json({ error: 'BAD_REQUEST', message: '缺少设备标识' }, 400)
-  const fingerprintHash = body.fingerprint ? (await sha256Hex(body.fingerprint + ipPepper)).slice(0, 32) : null
-
-  // 设备终身计数
-  const { data: device } = await db
-    .from('anon_devices')
-    .select('export_count')
-    .eq('device_id', deviceId)
-    .single()
-  const deviceUsed = device?.export_count ?? 0
-
-  // 同 IP 每日计数（今日 0 点起）
-  const dayStart = new Date()
-  dayStart.setUTCHours(0, 0, 0, 0)
-  const { count: ipToday } = await db
-    .from('usage_logs')
-    .select('id', { count: 'exact', head: true })
-    .eq('ip_hash', ipHash)
-    .eq('kind', 'anon')
-    .gte('created_at', dayStart.toISOString())
-  const ipUsed = ipToday ?? 0
-
-  const deviceLeft = Math.max(0, freeFullUses - deviceUsed)
-  const ipLeft = Math.max(0, ipDailyExtra - ipUsed)
-  const quota: QuotaInfo = { deviceLeft, ipLeft }
-
-  if (checkOnly) return json({ ok: true, kind: 'anon', remaining: quota, ticket: null })
-
-  if (deviceLeft <= 0 || ipLeft <= 0) {
-    return json(
-      {
-        error: 'QUOTA_EXCEEDED',
-        message: '免费试用已结束，请注册后继续使用。',
-        remaining: quota,
-      },
-      402,
-    )
-  }
-
-  if (!ticketSecret) return json({ error: 'SERVER_MISCONFIGURED', message: '服务端未配置票据密钥' }, 500)
-
-  await db.from('anon_devices').upsert({
-    device_id: deviceId,
-    fingerprint_hash: fingerprintHash,
-    export_count: deviceUsed + 1,
-    last_seen_at: new Date().toISOString(),
+  const { data: result, error } = await db.rpc('consume_export_quota', {
+    p_user_id: user?.id ?? null,
+    p_device_id: deviceId,
+    p_fingerprint: fingerprintHash,
+    p_ip_hash: ipHash,
+    p_format: format,
+    p_source: source,
+    p_check_only: checkOnly,
   })
-  await db.from('usage_logs').insert({
-    device_id: deviceId,
-    fingerprint_hash: fingerprintHash,
-    ip_hash: ipHash,
-    kind: 'anon',
-    format,
-    source,
-  })
-
-  const ticket = await issueTicket(`d:${deviceId}`, format, ticketSecret)
-  return json({ ok: true, ticket, kind: 'anon', remaining: { deviceLeft: deviceLeft - 1, ipLeft: ipLeft - 1 } })
+  if (error || !result) return json({ error: 'SERVER', message: '额度查询失败，请稍后重试' }, 500)
+  if (!result.ok) {
+    const status = result.error === 'QUOTA_EXCEEDED' ? 402
+      : result.error === 'DISABLED' ? 403 : result.error === 'AUTH_REQUIRED' ? 401
+      : result.error === 'MAINTENANCE' ? 503 : 500
+    return json(result, status)
+  }
+  const ticket = checkOnly ? null : await issueTicket(user ? `u:${user.id}` : `d:${deviceId}`, format, ticketSecret)
+  return json({ ...result, ticket })
 })

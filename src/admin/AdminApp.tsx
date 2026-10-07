@@ -17,7 +17,11 @@ const API = SUPABASE_URL ? `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/admi
 const TOKEN_KEY = 'markdoc.admin.token'
 const ME_KEY = 'markdoc.admin.me'
 
-interface Me { adminId: string; role: string; permissions: string[] }
+interface Me { adminId: string; role: string; permissions: string[]; mustChangePassword?: boolean }
+
+class AdminApiError extends Error {
+  constructor(message: string, readonly needTotp = false) { super(message) }
+}
 
 async function api<T = Record<string, unknown>>(action: string, params?: Record<string, unknown>): Promise<T> {
   const token = sessionStorage.getItem(TOKEN_KEY) ?? ''
@@ -26,13 +30,13 @@ async function api<T = Record<string, unknown>>(action: string, params?: Record<
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ action, params: params ?? {} }),
   })
-  if (res.status === 401) {
+  const body = await res.json().catch(() => ({}))
+  if (res.status === 401 && action !== 'login') {
     sessionStorage.removeItem(TOKEN_KEY)
     sessionStorage.removeItem(ME_KEY)
     throw new Error('未登录或会话已过期（2 小时无操作自动登出）')
   }
-  const body = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error((body as { error?: string }).error ?? `请求失败（${res.status}）`)
+  if (!res.ok) throw new AdminApiError(body.error ?? `请求失败（${res.status}）`, body.needTotp === true)
   return body as T
 }
 
@@ -447,13 +451,13 @@ function Login({ onDone }: { onDone: () => void }) {
   const submit = async () => {
     setBusy(true); setErr('')
     try {
-      const r = await api<{ token: string; role: string; permissions: string[] }>('login', { email, password, totp: totp || undefined })
+      const r = await api<{ token: string; role: string; permissions: string[]; mustChangePassword: boolean }>('login', { email, password, totp: totp || undefined })
       sessionStorage.setItem(TOKEN_KEY, r.token)
-      sessionStorage.setItem(ME_KEY, JSON.stringify({ adminId: '', role: r.role, permissions: r.permissions }))
+      sessionStorage.setItem(ME_KEY, JSON.stringify({ adminId: '', role: r.role, permissions: r.permissions, mustChangePassword: r.mustChangePassword }))
       onDone()
     } catch (e) {
       const msg = (e as Error).message
-      if (msg.includes('两步验证')) setNeedTotp(true)
+      if (e instanceof AdminApiError && e.needTotp) setNeedTotp(true)
       setErr(msg)
     } finally { setBusy(false) }
   }
@@ -525,18 +529,46 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
   )
 }
 
-function AdminApp() {
-  const [me, setMe] = useState<Me | null>(() => {
+function ChangePassword({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = async () => {
+    if (password !== confirm) { setErr('两次输入的密码不一致'); return }
+    setBusy(true); setErr('')
     try {
-      const raw = sessionStorage.getItem(ME_KEY)
-      return raw ? (JSON.parse(raw) as Me) : null
-    } catch { return null }
-  })
+      await api('password.change', { password })
+      onDone()
+    } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
+  }
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm space-y-3">
+        <h1 className="text-lg font-bold text-gray-800">修改初始密码</h1>
+        <p className="text-sm text-gray-500">新密码至少 12 位，包含字母和数字。保存后请使用新密码重新登录。</p>
+        <input className={`${input} w-full`} type="password" autoComplete="new-password" placeholder="新密码" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <input className={`${input} w-full`} type="password" autoComplete="new-password" placeholder="再次输入新密码" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        {err && <p className="text-xs text-red-500">{err}</p>}
+        <button className={`${btn} w-full`} disabled={busy} onClick={() => void submit()}>{busy ? '保存中…' : '保存并重新登录'}</button>
+        <button className={`${btn} w-full`} disabled={busy} onClick={() => void api('logout').catch(() => undefined).then(onDone)}>退出登录</button>
+      </div>
+    </div>
+  )
+}
+
+function AdminApp() {
+  const [me, setMe] = useState<Me | null>(null)
+  const [loading, setLoading] = useState(Boolean(SUPABASE_URL && sessionStorage.getItem(TOKEN_KEY)))
   const logout = useCallback(() => {
     sessionStorage.removeItem(TOKEN_KEY)
     sessionStorage.removeItem(ME_KEY)
     setMe(null)
   }, [])
+  useEffect(() => {
+    if (!SUPABASE_URL || !sessionStorage.getItem(TOKEN_KEY)) return
+    void api<Me>('me').then(setMe).catch(logout).finally(() => setLoading(false))
+  }, [logout])
   if (!SUPABASE_URL) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
@@ -547,6 +579,8 @@ function AdminApp() {
       </div>
     )
   }
+  if (loading) return <p className="p-8 text-sm text-gray-500">正在验证管理员会话…</p>
+  if (me?.mustChangePassword) return <ChangePassword onDone={logout} />
   return me ? <Shell me={me} onLogout={logout} /> : <Login onDone={() => window.location.reload()} />
 }
 
