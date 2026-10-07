@@ -28,6 +28,6 @@ export {
   type TicketResult,
   type Remaining,
 } from './quota'
-export { saveCloudHistory, exportMyHistoryJson } from './cloudHistory'
+export { saveCloudHistory, saveCloudDraft, importLocalHistoryToCloud, exportMyHistoryJson } from './cloudHistory'
 export { exportAccountData, deleteAccount } from './selfService'
 export { getDeviceId } from './fingerprint'

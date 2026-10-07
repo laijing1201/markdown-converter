@@ -1,5 +1,10 @@
 /**
- * 本地历史记录 —— 纯 localStorage，不登录、不上传。
+ * 本地历史记录 —— 纯 localStorage，不上传。
+ *
+ * 已启用账号体系的部署中，历史统一走云端（core/account/cloudHistory.ts），
+ * 本模块仅两处仍在使用：
+ *   1. 未配置后端的旧部署（accountEnabled=false）保持原有本地历史行为；
+ *   2. 退出登录 / 注销时清理本机残留（历史仅登录后存在）。
  *
  * v2 结构：{ schemaVersion: 2, entries: [...] }，读取时自动迁移 v1（裸数组）。
  * 配额不足时先丢弃较早的一半重试一次；仍失败则记录友好错误信息，
@@ -16,7 +21,7 @@ export interface HistoryEntry {
 
 const KEY = 'markdoc.history.v2'
 const SCHEMA_VERSION = 2
-const MAX_ENTRIES = 20
+const MAX_ENTRIES = 10
 
 let lastError: string | null = null
 
@@ -108,7 +113,8 @@ export function clearHistory(): void {
   } catch { /* ignore */ }
 }
 
-function makeTitle(content: string): string {
+/** 从内容提取标题：首个非空行，去 Markdown 记号，截 40 字（云端草稿复用） */
+export function makeTitle(content: string): string {
   const firstLine = content
     .split('\n')
     .map((l) => l.replace(/^#{1,6}\s+/, '').replace(/[*`>]/g, '').trim())

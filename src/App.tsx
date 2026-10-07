@@ -21,6 +21,7 @@ import {
   refreshRemaining,
   requestExportTicket,
   saveCloudHistory,
+  saveCloudDraft,
   signOut,
   type AccountUser,
   type Remaining,
@@ -352,11 +353,17 @@ export default function App() {
     }
   }, [darkMode])
 
-  // ── Local history autosave (debounced) + failure notice ─────────────────
-  // 需求：历史记录是登录后才有的能力——未登录（启用账号体系时）不产生任何本地历史
+  // ── History autosave (debounced) ─────────────────────────────────────────
+  // 需求：历史跟随账号——登录后编辑自动保存进云端（与导出同一列表，最多 10 条，
+  // 退出登录不可见、重新登录恢复）；未登录不产生任何历史；
+  // 未启用账号体系的旧部署保持原本地历史行为。
   useEffect(() => {
     if (!markdownContent) return
-    if (accountEnabled && !authUser) return
+    if (accountEnabled) {
+      if (!authUser) return
+      const t = setTimeout(() => { void saveCloudDraft(markdownContent) }, 1500)
+      return () => clearTimeout(t)
+    }
     const t = setTimeout(() => {
       saveToHistory(markdownContent)
       const err = consumeHistoryError()

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { loadHistory, deleteHistory, clearHistory, formatHistoryTime, type HistoryEntry } from '../../core/history'
-import { getSupabase, accountEnabled, getAuthUser } from '../../core/account'
+import { getSupabase, accountEnabled, importLocalHistoryToCloud } from '../../core/account'
 
 interface HistoryModalProps {
   /** 当前是否已登录（账号体系启用时，未登录不允许使用历史） */
@@ -20,22 +20,13 @@ interface CloudEntry {
 }
 
 /**
- * 历史记录：云端（账号）+ 本地 双 Tab。
- * 云端满足甲方清单：列表、搜索、排序、查看（恢复到编辑器可再次导出）、
- * 重命名、删除单条、批量删除、清空；服务端 RLS 按 user_id 隔离。
- * 需求：历史是登录后才有的能力——未登录不展示、不产生任何历史。
+ * 历史记录：跟随账号的云端历史（单一列表，最多保留最近 10 条）。
+ * 登录后编辑自动保存（草稿）与每次导出记录都进入这里；退出登录后不可见、
+ * 不再产生记录，重新登录自动恢复该账号的最近 10 条；
+ * 服务端 RLS 按 user_id 隔离，任意设备登录都能看到。
+ * 未启用账号体系的旧部署回退为浏览器本地历史（不上传）。
  */
 export default function HistoryModal({ authed, onRequireAuth, onRestore, onClose }: HistoryModalProps) {
-  const [tab, setTab] = useState<'cloud' | 'local'>('local')
-  const [cloudReady, setCloudReady] = useState(false)
-
-  useEffect(() => {
-    if (!accountEnabled) return
-    void getAuthUser().then((u) => {
-      if (u) { setTab('cloud'); setCloudReady(true) }
-    })
-  }, [])
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
@@ -47,12 +38,12 @@ export default function HistoryModal({ authed, onRequireAuth, onRestore, onClose
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg">✕</button>
         </div>
         {accountEnabled && !authed ? (
-          // 未登录：不展示任何历史（需求——未登录不存在历史）
+          // 未登录：不展示任何历史（历史仅登录后存在，退出登录即不可见）
           <div className="py-10 text-center">
             <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-900/40 text-2xl">🔐</span>
             <p className="mt-4 text-sm font-medium text-gray-800 dark:text-gray-100">历史记录为登录用户专属功能</p>
             <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-              登录后编辑内容自动保存、导出记录云端同步，任意设备都能查看
+              登录后编辑内容自动保存、导出记录云端同步（草稿与导出各保留最近 10 条），重新登录即可恢复，任意设备都能查看
             </p>
             <button
               onClick={onRequireAuth}
@@ -61,34 +52,23 @@ export default function HistoryModal({ authed, onRequireAuth, onRestore, onClose
               登录 / 注册
             </button>
           </div>
+        ) : accountEnabled ? (
+          <CloudPane onRestore={onRestore} />
         ) : (
-          <>
-            {accountEnabled && cloudReady && (
-              <div className="flex gap-1 mb-3">
-                {(['cloud', 'local'] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTab(t)}
-                    className={`px-3 py-1.5 text-sm rounded-md transition-colors ${tab === t ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 font-medium' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                  >
-                    {t === 'cloud' ? '☁️ 云端（随账号）' : '💻 本地'}
-                  </button>
-                ))}
-              </div>
-            )}
-            {tab === 'cloud' ? <CloudPane onRestore={onRestore} /> : <LocalPane onRestore={onRestore} />}
-          </>
+          <LocalPane onRestore={onRestore} />
         )}
       </div>
     </div>
   )
 }
 
-// ── 云端历史 ─────────────────────────────────────────────────────────────────
+// ── 云端历史（跟随账号）──────────────────────────────────────────────────────
 const PAGE_SIZE = 15
 const btnSmall = 'px-2.5 py-1 text-xs rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50'
 const btnSmallDanger = 'px-2.5 py-1 text-xs rounded-md border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50'
 const btnGhost = 'shrink-0 text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-all'
+
+const formatLabel = (f: string) => (f === 'draft' ? '草稿' : f.toUpperCase())
 
 function CloudPane({ onRestore }: { onRestore: (entry: HistoryEntry) => void }) {
   const [rows, setRows] = useState<CloudEntry[]>([])
@@ -98,7 +78,11 @@ function CloudPane({ onRestore }: { onRestore: (entry: HistoryEntry) => void }) 
   const [asc, setAsc] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [err, setErr] = useState('')
+  const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  const [importing, setImporting] = useState(false)
+  // 升级前遗留的本机历史（localStorage）：给一次性「导入账号」入口
+  const [localCount, setLocalCount] = useState(() => loadHistory().length)
 
   const load = useCallback(async () => {
     setErr('')
@@ -131,15 +115,32 @@ function CloudPane({ onRestore }: { onRestore: (entry: HistoryEntry) => void }) 
   const removeOne = (id: string) => { void run(async () => { const supabase = await getSupabase(); await supabase.from('histories').delete().eq('id', id) }) }
   const removeSelected = () => {
     if (selected.size === 0) return
-    if (!window.confirm(`删除选中的 ${selected.size} 条云端历史？`)) return
+    if (!window.confirm(`删除选中的 ${selected.size} 条历史？`)) return
     void run(async () => { const supabase = await getSupabase(); await supabase.from('histories').delete().in('id', [...selected]) })
   }
   const clearAll = () => {
-    if (!window.confirm(`清空全部 ${total} 条云端历史？此操作不可恢复。`)) return
+    if (!window.confirm(`清空全部 ${total} 条历史？此操作不可恢复。`)) return
     void run(async () => { const supabase = await getSupabase(); await supabase.from('histories').delete().neq('id', '00000000-0000-0000-0000-000000000000') })
   }
   const reexport = (entry: CloudEntry) => {
     onRestore({ id: entry.id, title: entry.title, content: entry.content_md, time: Date.now() } as HistoryEntry)
+  }
+  const importLocal = async () => {
+    setImporting(true)
+    setErr('')
+    setNotice('')
+    try {
+      const n = await importLocalHistoryToCloud()
+      clearHistory()
+      setLocalCount(0)
+      setPage(1)
+      await load()
+      setNotice(`已将本机 ${n} 条历史导入账号`)
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setImporting(false)
+    }
   }
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -165,16 +166,29 @@ function CloudPane({ onRestore }: { onRestore: (entry: HistoryEntry) => void }) 
         {selected.size > 0 && <button className={btnSmallDanger} disabled={busy} onClick={removeSelected}>删除选中（{selected.size}）</button>}
         {total > 0 && <button className={btnSmallDanger} disabled={busy} onClick={clearAll}>清空全部</button>}
       </div>
+      {localCount > 0 && (
+        <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-md bg-amber-50 dark:bg-amber-900/30 text-xs text-amber-700 dark:text-amber-300">
+          <span>检测到本机存有 {localCount} 条未随账号保存的旧历史记录</span>
+          <button
+            onClick={() => void importLocal()}
+            disabled={importing}
+            className="shrink-0 px-2.5 py-1 rounded-md bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-medium transition-colors"
+          >
+            {importing ? '导入中…' : '导入账号'}
+          </button>
+        </div>
+      )}
       {err && <p className="text-sm text-red-500 mb-2">{err}</p>}
+      {notice && <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-2">{notice}</p>}
       <div className="flex-1 overflow-y-auto space-y-1.5 min-h-0">
-        {rows.length === 0 && !err && <p className="text-sm text-gray-400 text-center py-10">云端还没有历史记录——登录后每次导出会自动保存到这里</p>}
+        {rows.length === 0 && !err && <p className="text-sm text-gray-400 text-center py-10">还没有历史记录——编辑内容会自动保存，每次导出也会记录到这里（最多保留最近 10 条）</p>}
         {rows.map((entry) => (
           <div key={entry.id} className="group flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-600 transition-colors">
             <input type="checkbox" className="shrink-0 accent-blue-600" checked={selected.has(entry.id)} onChange={() => toggle(entry.id)} />
             <button className="flex-1 text-left min-w-0" onClick={() => reexport(entry)} title="载入编辑器，可再次导出">
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{entry.title}</p>
               <p className="text-xs text-gray-400">
-                {new Date(entry.created_at).toLocaleString()} · {entry.format.toUpperCase()} · {Math.round(entry.content_md.length / 100) / 10}k 字符
+                {new Date(entry.created_at).toLocaleString()} · {formatLabel(entry.format)} · {Math.round(entry.content_md.length / 100) / 10}k 字符
               </p>
             </button>
             <button className={btnGhost} onClick={() => rename(entry)} title="重命名">✏️</button>
@@ -189,12 +203,14 @@ function CloudPane({ onRestore }: { onRestore: (entry: HistoryEntry) => void }) 
           <button className={btnSmall} disabled={page * PAGE_SIZE >= total} onClick={() => setPage(page + 1)}>下一页</button>
         </div>
       )}
-      <p className="text-xs text-gray-400 pt-3 mt-3 border-t border-gray-100 dark:border-gray-700">🔒 云端历史按账号隔离（服务端 RLS），仅本人可见；每次导出自动保存</p>
+      <p className="text-xs text-gray-400 pt-3 mt-3 border-t border-gray-100 dark:border-gray-700">
+        🔒 历史跟随账号保存（服务端按账号隔离，仅本人可见），编辑草稿与导出记录各保留最近 10 条；退出登录后不可见，重新登录自动恢复
+      </p>
     </>
   )
 }
 
-// ── 本地历史 ─────────────────────────────────────────────────────────────────
+// ── 本地历史（仅未启用账号体系的旧部署）──────────────────────────────────────
 function LocalPane({ onRestore }: { onRestore: (entry: HistoryEntry) => void }) {
   const [entries, setEntries] = useState<HistoryEntry[]>(() => loadHistory())
   return (
