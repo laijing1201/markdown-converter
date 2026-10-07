@@ -25,6 +25,23 @@
   }
 }
 
+/* ── 弹窗入场动画 ────────────────────────────────────────────────────────── */
+
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-pop {
+  animation: modal-pop-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* ── 落地页 / 应用切换动画 ──────────────────────────────────────────────── */
 
 @keyframes app-fade-in {
@@ -70,7 +87,8 @@
   .landing-float-delay {
     animation: none;
   }
-  .app-fade-in {
+  .app-fade-in,
+  .modal-pop {
     animation: none;
   }
 }
