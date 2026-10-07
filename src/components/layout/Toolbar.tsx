@@ -7,7 +7,6 @@ interface ToolbarProps {
   busy: boolean
   onExportWord: () => void
   onExportPdf: () => void
-  onPreviewPdf: () => void
   onCopyRich: () => void
   onSmartFormat: () => void
   onDeepFix: () => void
@@ -38,7 +37,6 @@ export default function Toolbar({
   busy,
   onExportWord,
   onExportPdf,
-  onPreviewPdf,
   onCopyRich,
   onSmartFormat,
   onDeepFix,
@@ -115,7 +113,7 @@ export default function Toolbar({
         <button onClick={onOpenSettings} className={ghostBtn} title="字体、字号、行距、页边距、页眉页脚、目录、标题编号等全部导出设置">
           ⚙ 高级设置
         </button>
-        <button onClick={onOpenHistory} className={ghostBtn} title="浏览器本地保存的历史文档">
+        <button onClick={onOpenHistory} className={ghostBtn} title="历史记录（登录后可用：自动保存、云端同步）">
           🕘 历史
         </button>
       </div>
@@ -130,14 +128,6 @@ export default function Toolbar({
           title="复制渲染后的内容，直接粘贴进 Word 可保留排版"
         >
           复制
-        </button>
-        <button
-          onClick={onPreviewPdf}
-          disabled={busy}
-          className="px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-          title="查看最终效果：真实分页、页眉页脚、页码，导出前先看「第 3 页是什么样」"
-        >
-          最终效果
         </button>
         <button
           onClick={onBatchExport}

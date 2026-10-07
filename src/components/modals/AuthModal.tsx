@@ -6,6 +6,7 @@ import {
   signUp,
   validateEmail,
   validatePassword,
+  verifySignupCode,
   type AuthResult,
 } from '../../core/account'
 
@@ -35,6 +36,9 @@ const MailIcon = ({ className }: { className?: string }) => (
 )
 const LockIcon = ({ className }: { className?: string }) => (
   <Icon className={className} d={<><rect x="4.5" y="10.5" width="15" height="9.5" rx="2.5" /><path d="M8 10.5v-3a4 4 0 0 1 8 0v3" /><circle cx="12" cy="15.2" r="1" fill="currentColor" stroke="none" /></>} />
+)
+const ShieldIcon = ({ className }: { className?: string }) => (
+  <Icon className={className} d={<><path d="M12 3.5 5 6v5.2c0 4.2 2.9 7.9 7 9.3 4.1-1.4 7-5.1 7-9.3V6l-7-2.5Z" /><path d="m9.2 12 2 2 3.6-4" /></>} />
 )
 const EyeIcon = ({ className }: { className?: string }) => (
   <Icon className={className} d={<><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="3" /></>} />
@@ -81,12 +85,15 @@ function Callout({ tone, children }: { tone: 'error' | 'info' | 'banner'; childr
 /**
  * 注册 / 登录 / 重置密码弹窗。视觉与 Landing 的品牌渐变（indigo→violet→fuchsia）统一。
  * 需求映射：错误提示逐条明确（邮箱未验证/密码错误/发送频繁/网络错误）；
- * 注册需勾选隐私政策与服务条款；验证邮件 60 秒冷却（客户端节流 + 服务端频控）。
+ * 注册需勾选隐私政策与服务条款；注册第二步输入邮箱验证码（6 位，验证通过即登录）；
+ * 验证邮件 60 秒冷却（客户端节流 + 服务端频控）。
  */
 export default function AuthModal({ open, initialMode, banner, resumeTarget, onClose, onAuthed }: AuthModalProps) {
   const [mode, setMode] = useState<AuthModalMode>(initialMode)
+  const [regStep, setRegStep] = useState<'form' | 'code'>('form')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState('')
@@ -99,9 +106,11 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
   useEffect(() => {
     if (open) {
       setMode(initialMode)
+      setRegStep('form')
       setError(banner ?? '')
       setInfo('')
       setPassword('')
+      setCode('')
       setShowPw(false)
     }
   }, [open, initialMode, banner])
@@ -114,12 +123,14 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
 
   if (!open) return null
 
-  const title = mode === 'login' ? '欢迎回来' : mode === 'register' ? '创建账号' : '重置密码'
+  const title = mode === 'login' ? '欢迎回来' : mode === 'register' ? (regStep === 'code' ? '输入邮箱验证码' : '创建账号') : '重置密码'
   const subtitle =
     mode === 'login'
       ? '登录 MarkDoc 账号，继续你的创作'
       : mode === 'register'
-        ? '注册后可云端同步历史与导出文档'
+        ? regStep === 'code'
+          ? `验证码已发送至 ${email}，请查收（含垃圾箱）`
+          : '注册后可云端同步历史与导出文档'
         : '输入注册邮箱，我们将发送重置链接'
 
   const apply = (r: AuthResult): boolean => {
@@ -130,6 +141,11 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
     return true
   }
 
+  const authed = () => {
+    onClose()
+    onAuthed(resumeTarget ?? null)
+  }
+
   const handleLogin = async () => {
     setError('')
     if (!validateEmail(email)) return setError('邮箱格式不正确')
@@ -137,10 +153,7 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
     setBusy(true)
     const r = await signIn(email, password)
     setBusy(false)
-    if (apply(r)) {
-      onClose()
-      onAuthed(resumeTarget ?? null)
-    }
+    if (apply(r)) authed()
   }
 
   const handleRegister = async () => {
@@ -153,10 +166,24 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
     setBusy(true)
     const r = await signUp(email, password, consent)
     setBusy(false)
-    if (apply(r)) {
-      setInfo('验证邮件已发送，请查收邮箱（含垃圾箱）完成验证后登录。链接 10 分钟内有效。')
-      setResendLeft(60)
+    if (!apply(r)) return
+    if (r.ok && r.hasSession) {
+      // 项目开启了「邮件自动确认」：注册即登录（无需验证码）
+      authed()
+      return
     }
+    setRegStep('code')
+    setInfo('验证码已发送至你的邮箱，请输入邮件中的 6 位数字验证码完成验证。')
+    setResendLeft(60)
+  }
+
+  const handleVerify = async () => {
+    setError('')
+    setInfo('')
+    setBusy(true)
+    const r = await verifySignupCode(email, code)
+    setBusy(false)
+    if (apply(r)) authed()
   }
 
   const handleReset = async () => {
@@ -176,19 +203,21 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
     const r = await resendVerification(emailRef.current)
     setBusy(false)
     if (apply(r)) {
-      setInfo('验证邮件已重新发送，请查收。')
+      setInfo('验证码已重新发送，请查收邮箱（含垃圾箱）。')
       setResendLeft(60)
     }
   }
 
   const submit = () => {
     if (mode === 'login') void handleLogin()
-    else if (mode === 'register') void handleRegister()
+    else if (mode === 'register') void (regStep === 'code' ? handleVerify() : handleRegister())
     else void handleReset()
   }
 
   const switchMode = (m: AuthModalMode) => {
     setMode(m)
+    setRegStep('form')
+    setCode('')
     setError('')
     setInfo('')
   }
@@ -223,8 +252,8 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
         <div className="relative space-y-3.5 px-6 pb-6 pt-5">
           {banner && <Callout tone="banner">{banner}</Callout>}
 
-          {/* 登录 / 注册 分段切换 */}
-          {mode !== 'reset' && (
+          {/* 登录 / 注册 分段切换（验证码步骤隐藏，保持流程专注） */}
+          {mode !== 'reset' && regStep !== 'code' && (
             <div className="relative flex rounded-xl bg-gray-100 p-1 dark:bg-gray-900/70">
               <span
                 aria-hidden
@@ -249,23 +278,39 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
             </div>
           )}
 
-          {/* 邮箱 */}
-          <div className="relative">
-            <MailIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              className={inputCls}
-              type="email"
-              placeholder="邮箱地址"
-              value={email}
-              autoComplete="email"
-              autoFocus
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && submit()}
-            />
-          </div>
+          {/* 邮箱（验证码步骤只读展示） */}
+          {regStep === 'code' ? (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-900/50">
+              <span className="flex min-w-0 items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+                <MailIcon className="h-4 w-4 shrink-0 text-gray-400" />
+                <span className="truncate">{email}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => { setRegStep('form'); setCode(''); setError(''); setInfo('') }}
+                className="shrink-0 text-xs text-violet-600 hover:underline dark:text-violet-400"
+              >
+                修改
+              </button>
+            </div>
+          ) : (
+            <div className="relative">
+              <MailIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                className={inputCls}
+                type="email"
+                placeholder="邮箱地址"
+                value={email}
+                autoComplete="email"
+                autoFocus
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && submit()}
+              />
+            </div>
+          )}
 
-          {/* 密码 */}
-          {mode !== 'reset' && (
+          {/* 密码（仅登录 / 注册第一步） */}
+          {mode !== 'reset' && !(mode === 'register' && regStep === 'code') && (
             <div className="relative">
               <LockIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
@@ -289,9 +334,28 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
             </div>
           )}
 
+          {/* 邮箱验证码（注册第二步） */}
+          {mode === 'register' && regStep === 'code' && (
+            <div className="relative">
+              <ShieldIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                className={`${inputCls} tracking-[0.4em]`}
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="6 位验证码"
+                maxLength={6}
+                value={code}
+                autoFocus
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                onKeyDown={(e) => e.key === 'Enter' && submit()}
+              />
+            </div>
+          )}
+
           {error && <Callout tone="error">{error}</Callout>}
 
-          {mode === 'register' && (
+          {mode === 'register' && regStep === 'form' && (
             <label className="flex cursor-pointer select-none items-start gap-2.5 rounded-xl border border-gray-200 bg-gray-50/80 px-3 py-2.5 text-xs leading-relaxed text-gray-600 transition-colors hover:border-violet-300 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:border-violet-700">
               <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-3.5 w-3.5 rounded accent-violet-600" />
               <span>
@@ -306,20 +370,34 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
 
           <button type="button" className={btnPrimary} disabled={busy} onClick={submit}>
             {busy && <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden />}
-            {busy ? '处理中…' : mode === 'login' ? '登录' : mode === 'register' ? '注册并获取验证邮件' : '发送重置邮件'}
+            {busy
+              ? '处理中…'
+              : mode === 'login'
+                ? '登录'
+                : mode === 'register'
+                  ? regStep === 'code' ? '验证并登录' : '获取验证码'
+                  : '发送重置邮件'}
           </button>
 
           {info && <Callout tone="info">{info}</Callout>}
 
+          {mode === 'register' && regStep === 'code' && (
+            <p className="text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
+              收到的邮件若只包含验证链接而没有验证码：点击链接完成验证后，直接返回登录即可。
+            </p>
+          )}
+
           <div className="flex items-center justify-between pt-0.5 text-xs">
             {mode === 'login' ? (
               <button className={linkBtn} onClick={() => switchMode('reset')}>忘记密码？</button>
+            ) : mode === 'register' && regStep === 'code' ? (
+              <button className={linkBtn} onClick={() => { setRegStep('form'); setCode(''); setError(''); setInfo('') }}>返回上一步</button>
             ) : (
               <button className={linkBtn} onClick={() => switchMode('login')}>返回登录</button>
             )}
-            {mode === 'register' && info && (
-              <button className={linkBtn} disabled={resendLeft > 0} onClick={handleResend}>
-                {resendLeft > 0 ? `重新发送（${resendLeft}s）` : '重新发送验证邮件'}
+            {mode === 'register' && regStep === 'code' && (
+              <button className={linkBtn} disabled={resendLeft > 0 || busy} onClick={handleResend}>
+                {resendLeft > 0 ? `重新发送（${resendLeft}s）` : '重新发送验证码'}
               </button>
             )}
           </div>

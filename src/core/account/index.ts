@@ -10,6 +10,7 @@ export {
   onAuthChange,
   signIn,
   signUp,
+  verifySignupCode,
   signOut,
   sendPasswordReset,
   resendVerification,

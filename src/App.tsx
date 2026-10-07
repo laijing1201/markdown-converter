@@ -29,7 +29,7 @@ import { validateMarkdown, detectEncodingIssues } from './core/validator'
 import { smartFormatText } from './core/formatter'
 import { repairAiMarkdown, type RepairFix } from './core/repair'
 import { runPreflight, type PreflightResult } from './core/preflight'
-import { saveToHistory, consumeHistoryError, type HistoryEntry } from './core/history'
+import { saveToHistory, clearHistory, consumeHistoryError, type HistoryEntry } from './core/history'
 import { buildExportFilename } from './core/filename'
 import { extractFormulas } from './core/markdown'
 import ExportReportModal, { type ExportQualityReport } from './components/modals/ExportReportModal'
@@ -113,7 +113,7 @@ $$\\begin{cases} x^2, & x \\ge 0 \\\\ -x, & x < 0 \\end{cases}$$
 | Model B | 32B | 128K |
 
 1. 粘贴 AI 回答（格式破损会自动修复）
-2. 在右侧确认排版效果，可先「预览 PDF」检查分页
+2. 在右侧确认排版效果，可先切「最终效果」检查分页
 3. 点击「导出 Word」或「导出 PDF」
 
 ---
@@ -353,8 +353,10 @@ export default function App() {
   }, [darkMode])
 
   // ── Local history autosave (debounced) + failure notice ─────────────────
+  // 需求：历史记录是登录后才有的能力——未登录（启用账号体系时）不产生任何本地历史
   useEffect(() => {
     if (!markdownContent) return
+    if (accountEnabled && !authUser) return
     const t = setTimeout(() => {
       saveToHistory(markdownContent)
       const err = consumeHistoryError()
@@ -365,7 +367,7 @@ export default function App() {
       }
     }, 1500)
     return () => clearTimeout(t)
-  }, [markdownContent, showToast])
+  }, [markdownContent, authUser, showToast])
 
   // ── Basic handlers ───────────────────────────────────────────────────────
   const handleContentChange = useCallback((value: string) => {
@@ -597,7 +599,7 @@ export default function App() {
 
   /**
    * 导出统一入口（配额执法点）：preflight 通过后、真正导出前向服务端申请票据。
-   * 匿名免费次数用完 → 弹注册引导；登录后不限次（system_configs 可改）。
+   * 匿名免费次数用完（服务端或本地兜底）→ 弹注册引导；登录后不限次（system_configs 可改）。
    * 票据成功且已登录 → 异步保存云端历史（不阻塞导出）。
    */
   const runExportGated = useCallback(async (target: 'docx' | 'pdf') => {
@@ -607,13 +609,17 @@ export default function App() {
       return
     }
     const res = await requestExportTicket(target)
+    // 徽标 / 复制拦截依赖的剩余次数视图随票据结果即时刷新（匿名）
+    setQuotaRemaining(res.remaining ?? null)
     if (res.ok) {
-      void saveCloudHistory({
-        format: target,
-        title: buildExportFilename(markdownContent, settings.documentTitle),
-        contentMd: markdownContent,
-        options: settings as unknown as Record<string, unknown>,
-      })
+      if (res.kind === 'user') {
+        void saveCloudHistory({
+          format: target,
+          title: buildExportFilename(markdownContent, settings.documentTitle),
+          contentMd: markdownContent,
+          options: settings as unknown as Record<string, unknown>,
+        })
+      }
       if (target === 'pdf') void doExportPdf()
       else void doExportDocx()
       return
@@ -670,6 +676,11 @@ export default function App() {
   const handleCopyRich = useCallback(async () => {
     const previewEl = document.getElementById(previewId)
     if (!previewEl) return
+    // 复制与导出同属「把排版结果拿走」：匿名免费额度用完后同样引导注册
+    if (accountEnabled && !authUser && quotaRemaining?.deviceLeft === 0) {
+      setAuthModal({ open: true, mode: 'register', banner: '免费试用已结束，注册后可继续导出与复制。', resume: null })
+      return
+    }
     const plain = previewEl.innerText
     try {
       if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
@@ -690,7 +701,7 @@ export default function App() {
         showToast('⚠️', '复制失败，请手动选择内容复制')
       }
     }
-  }, [showToast])
+  }, [showToast, authUser, quotaRemaining])
 
   const handleRestoreHistory = useCallback((entry: HistoryEntry) => {
     setMarkdownContent(entry.content)
@@ -763,6 +774,8 @@ export default function App() {
     let cleanup: (() => void) | null = null
     void onAuthChange((u) => {
       setAuthUser(u)
+      // 需求：历史记录仅登录后存在——退出登录 / 会话失效即清空本机历史
+      if (!u) clearHistory()
       void refreshRemaining().then((r) => setQuotaRemaining(u ? null : r))
     }).then((un) => { cleanup = un })
     void refreshRemaining().then((r) => setQuotaRemaining(r))
@@ -797,6 +810,7 @@ export default function App() {
   const handleSignOut = useCallback(() => {
     void signOut()
     setAuthUser(null)
+    clearHistory() // 历史记录仅登录后存在：退出即清空本机历史
   }, [])
 
   // 工具栏徽标：未登录显示「登录 · 剩余 N 次」（需求 UI/UX §6），用完显示「注册后继续」
@@ -889,7 +903,6 @@ export default function App() {
         busy={busy}
         onExportWord={handleExportWord}
         onExportPdf={handleExportPdf}
-        onPreviewPdf={handlePreviewPdf}
         onCopyRich={() => void handleCopyRich()}
         onSmartFormat={() => setShowSmartFormat(true)}
         onDeepFix={() => setShowDeepFix(true)}
@@ -961,6 +974,11 @@ export default function App() {
 
       {showHistory && (
         <HistoryModal
+          authed={Boolean(authUser)}
+          onRequireAuth={() => {
+            setShowHistory(false)
+            setAuthModal({ open: true, mode: 'login', banner: '登录后即可使用历史记录：自动保存、云端同步、任意设备可查看。', resume: null })
+          }}
           onRestore={handleRestoreHistory}
           onClose={() => setShowHistory(false)}
         />
@@ -978,6 +996,7 @@ export default function App() {
           settings={settings}
           templateLabel={templateLabel}
           onToast={showToast}
+          onBlocked={(banner) => setAuthModal({ open: true, mode: 'register', banner, resume: null })}
           onClose={() => setShowBatchExport(false)}
         />
       )}
@@ -999,6 +1018,7 @@ export default function App() {
             setShowAccount(false)
             void signOut()
             setAuthUser(null)
+            clearHistory()
             showToast('✓', '已退出登录（所有设备）')
           }}
         />
@@ -1195,8 +1215,9 @@ export default function App() {
               <span className="text-[10px] text-gray-400 dark:text-gray-500 hidden sm:inline" title="所有内容仅在浏览器本地处理，不上传服务器">
                 🔒 本地处理
               </span>
-              {/* 编辑 / 最终效果 正式区分：最终效果 = 真实分页 + 页眉页脚 + 页码 */}
-              <div className="hidden sm:flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 text-[11px]" role="tablist" aria-label="预览模式">
+              {/* 编辑 / 最终效果 正式区分：最终效果 = 真实分页 + 页眉页脚 + 页码。
+                  「最终效果」入口仅此一处（移动端同样显示），避免多处重复入口 */}
+              <div className="flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-600 text-[11px]" role="tablist" aria-label="预览模式">
                 <button
                   role="tab"
                   aria-selected={!showPdfPreview}

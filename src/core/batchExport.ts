@@ -42,6 +42,11 @@ export interface BatchOptions {
    * previewDom 依赖完整浏览器 DOM（mermaid），单测注入轻量实现。
    */
   render?: (container: HTMLElement, content: string, settings: DocSettings) => Promise<void>
+  /**
+   * 每个文件转换前的额度校验钩子（导出票据）。抛错则中止剩余文件，
+   * 错误以 BatchQuotaError 形式抛出（已完成的文件仍打包返回）。
+   */
+  beforeFile?: (index: number, fileName: string) => Promise<void>
 }
 
 export interface BatchOutcome {
@@ -55,6 +60,18 @@ export class BatchCancelledError extends Error {
   constructor(readonly outcome: BatchOutcome) {
     super('批量转换已取消')
     this.name = 'BatchCancelledError'
+  }
+}
+
+/** 额度校验未通过（beforeFile 抛错）：携带已完成的结果供部分下载 */
+export class BatchQuotaError extends Error {
+  constructor(
+    readonly outcome: BatchOutcome,
+    /** 原始拦截信息；约定 'QUOTA::<文案>' 前缀表示额度用完（区别于网络错误） */
+    readonly blockMessage: string,
+  ) {
+    super(blockMessage)
+    this.name = 'BatchQuotaError'
   }
 }
 
@@ -98,7 +115,7 @@ export function renameZipUnique(fileName: string, used: Set<string>): string {
  * 单个文件失败不影响其它文件（结果里逐项标注原因）。
  */
 export async function batchConvertToDocxZip(items: BatchItem[], opts: BatchOptions): Promise<BatchOutcome> {
-  const { settings, onProgress, checkCancel, render } = opts
+  const { settings, onProgress, checkCancel, render, beforeFile } = opts
   const results: BatchItemResult[] = []
   const usedNames = new Set<string>()
   const zipEntries: { name: string; data: Uint8Array }[] = []
@@ -110,6 +127,17 @@ export async function batchConvertToDocxZip(items: BatchItem[], opts: BatchOptio
     }
     const item = items[i]
     onProgress?.({ done: i, total: items.length, current: item.fileName })
+    if (beforeFile) {
+      try {
+        await beforeFile(i, item.fileName)
+      } catch (err) {
+        const blob = await zipResults(zipEntries)
+        throw new BatchQuotaError(
+          makeOutcome(blob, results),
+          err instanceof Error ? err.message : String(err),
+        )
+      }
+    }
     try {
       const docxBlob = await convertOne(item, settings, render)
       const data = new Uint8Array(await docxBlob.arrayBuffer())

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MarkDoc 注册验证码</title>
+</head>
+<body style="margin:0;padding:24px;background:#f6f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;">
+  <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(15,23,42,.08);">
+    <h1 style="margin:0 0 16px;font-size:18px;color:#0f172a;">MarkDoc 注册验证码</h1>
+    <p style="margin:0 0 20px;font-size:14px;line-height:1.7;color:#475569;">
+      你正在注册 MarkDoc 账号。请在注册页面输入以下 <strong>6 位数字验证码</strong> 完成邮箱验证：
+    </p>
+    <p style="margin:0 0 20px;text-align:center;">
+      <span style="display:inline-block;font-size:30px;font-weight:700;letter-spacing:10px;color:#4f46e5;background:#eef2ff;border-radius:10px;padding:12px 20px 12px 30px;">{{ .Token }}</span>
+    </p>
+    <p style="margin:0 0 8px;font-size:13px;line-height:1.7;color:#64748b;">
+      验证码 1 小时内有效。如果这不是你本人的操作，请忽略本邮件。
+    </p>
+    <p style="margin:0 0 24px;font-size:13px;line-height:1.7;color:#64748b;">
+      也可以点击下面的链接直接完成验证：<br />
+      <a href="{{ .ConfirmationURL }}" style="color:#4f46e5;word-break:break-all;">{{ .ConfirmationURL }}</a>
+    </p>
+    <hr style="border:none;border-top:1px solid #e2e8f0;margin:0 0 16px;" />
+    <p style="margin:0;font-size:12px;color:#94a3b8;">MarkDoc · 把 AI 回答变成排版好的 Word / PDF</p>
+  </div>
+</body>
+</html>

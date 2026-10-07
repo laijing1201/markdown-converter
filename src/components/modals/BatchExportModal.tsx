@@ -4,24 +4,29 @@ import {
   batchConvertToDocxZip,
   readBatchFiles,
   BatchCancelledError,
+  BatchQuotaError,
   type BatchItem,
   type BatchItemResult,
   type BatchProgress,
 } from '../../core/batchExport'
+import { requestExportTicket } from '../../core/account'
 import type { DocSettings } from '../../core/templates'
 
 interface BatchExportModalProps {
   settings: DocSettings
   templateLabel: string
   onToast: (icon: string, message: string, details?: string[]) => void
+  /** 额度用完被拦截时回调（App 弹出注册引导） */
+  onBlocked: (banner: string) => void
   onClose: () => void
 }
 
 /**
  * 批量转换弹窗（需求 P1-8）：多选 .md 文件 → 统一套用当前模板 →
  * 逐个转 Word → 打包 ZIP 下载；展示逐文件进度与结果汇总。
+ * 每个文件转换前申请导出票据（与单篇导出同一执法点）：匿名免费额度用完即中断并引导注册。
  */
-export default function BatchExportModal({ settings, templateLabel, onToast, onClose }: BatchExportModalProps) {
+export default function BatchExportModal({ settings, templateLabel, onToast, onBlocked, onClose }: BatchExportModalProps) {
   const [items, setItems] = useState<BatchItem[]>([])
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<BatchProgress | null>(null)
@@ -56,6 +61,11 @@ export default function BatchExportModal({ settings, templateLabel, onToast, onC
         settings,
         onProgress: setProgress,
         checkCancel: () => cancelRef.current,
+        // 每个文件转换前申请导出票据；额度用完（QUOTA:: 前缀）→ 弹注册引导，其余中断并提示
+        beforeFile: async () => {
+          const res = await requestExportTicket('docx', { source: 'web' })
+          if (!res.ok) throw new Error(`${res.reason === 'QUOTA_EXCEEDED' ? 'QUOTA::' : ''}${res.message}`)
+        },
       })
       setResults(outcome.results)
       setZipBlob(outcome.blob)
@@ -64,7 +74,17 @@ export default function BatchExportModal({ settings, templateLabel, onToast, onC
         `批量转换完成：成功 ${outcome.okCount} 个${outcome.failCount ? `，失败 ${outcome.failCount} 个` : ''}`,
       )
     } catch (err) {
-      if (err instanceof BatchCancelledError) {
+      if (err instanceof BatchQuotaError) {
+        setResults(err.outcome.results)
+        setZipBlob(err.outcome.blob)
+        if (err.blockMessage.startsWith('QUOTA::')) {
+          const banner = err.blockMessage.slice('QUOTA::'.length) || '免费试用已结束，请注册后继续使用。'
+          onToast('🔒', banner)
+          onBlocked(banner)
+        } else {
+          onToast('⚠️', `批量转换已中断：${err.blockMessage}`)
+        }
+      } else if (err instanceof BatchCancelledError) {
         setResults(err.outcome.results)
         setZipBlob(err.outcome.blob)
         onToast('ℹ️', `已取消：完成 ${err.outcome.okCount} 个后停止`)
@@ -76,7 +96,7 @@ export default function BatchExportModal({ settings, templateLabel, onToast, onC
       setRunning(false)
       setProgress(null)
     }
-  }, [items, settings, onToast])
+  }, [items, settings, onToast, onBlocked])
 
   const handleDownload = useCallback(() => {
     if (!zipBlob) return

@@ -5,7 +5,7 @@ export interface AccountUser {
   email: string
 }
 
-export type AuthResult = { ok: true } | { ok: false; message: string }
+export type AuthResult = { ok: true; hasSession?: boolean } | { ok: false; message: string }
 
 /** 密码规则：至少 8 位，包含字母和数字（需求 §3.2） */
 export function validatePassword(password: string): string | null {
@@ -30,6 +30,8 @@ function mapAuthError(err: unknown): string {
   }
   if (code.code === 'user_banned') return '账号已被禁用，请联系管理员'
   if (msg.includes('Email not confirmed')) return '邮箱未验证，请先查收验证邮件后再登录'
+  if (/invalidotp|invalid token|token is invalid/i.test(msg)) return '验证码不正确，请核对后重试'
+  if (/token has expired|otp expired/i.test(msg)) return '验证码已过期，请重新获取'
   if (msg.includes('Invalid login credentials')) return '邮箱或密码错误'
   if (msg.includes('User already registered')) return '该邮箱已注册，请直接登录'
   if (msg.includes('unable to validate email') || msg.includes('invalid email')) return '邮箱格式不正确'
@@ -86,9 +88,28 @@ export async function signUp(
       options: { data: { source }, emailRedirectTo: `${location.origin}${location.pathname}` },
     })
     if (error) return { ok: false, message: mapAuthError(error) }
-    // 关闭"自动确认"的正式环境：返回 session 为空，等待用户点验证链接
-    if (data.session) return { ok: true }
-    return { ok: true }
+    // 关闭"自动确认"的正式环境：返回 session 为空，进入验证码校验步骤；
+    // 若项目开启了自动确认（session 已建立），调用方可直接进入登录态
+    return { ok: true, hasSession: Boolean(data.session) }
+  } catch (err) {
+    return { ok: false, message: mapAuthError(err) }
+  }
+}
+
+/**
+ * 注册邮箱验证码校验（需求：注册需验证邮箱验证码）。
+ * 邮箱收到 6 位数字验证码（Supabase「Confirm signup」模板使用 {{ .Token }}），
+ * 校验通过即完成邮箱确认并直接建立会话（注册即登录）。
+ * 兼容：若邮件里仍是验证链接（模板未更新），用户点链接后直接登录即可。
+ */
+export async function verifySignupCode(email: string, token: string): Promise<AuthResult> {
+  const clean = token.replace(/\D/g, '')
+  if (clean.length !== 6) return { ok: false, message: '请输入邮箱收到的 6 位数字验证码' }
+  try {
+    const supabase = await getSupabase()
+    const { data, error } = await supabase.auth.verifyOtp({ email, token: clean, type: 'signup' })
+    if (error) return { ok: false, message: mapAuthError(error) }
+    return { ok: true, hasSession: Boolean(data.session) }
   } catch (err) {
     return { ok: false, message: mapAuthError(err) }
   }

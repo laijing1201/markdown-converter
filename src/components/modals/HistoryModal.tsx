@@ -3,6 +3,10 @@ import { loadHistory, deleteHistory, clearHistory, formatHistoryTime, type Histo
 import { getSupabase, accountEnabled, getAuthUser } from '../../core/account'
 
 interface HistoryModalProps {
+  /** 当前是否已登录（账号体系启用时，未登录不允许使用历史） */
+  authed: boolean
+  /** 未登录点击「去登录」回调 */
+  onRequireAuth: () => void
   onRestore: (entry: HistoryEntry) => void
   onClose: () => void
 }
@@ -19,8 +23,9 @@ interface CloudEntry {
  * 历史记录：云端（账号）+ 本地 双 Tab。
  * 云端满足甲方清单：列表、搜索、排序、查看（恢复到编辑器可再次导出）、
  * 重命名、删除单条、批量删除、清空；服务端 RLS 按 user_id 隔离。
+ * 需求：历史是登录后才有的能力——未登录不展示、不产生任何历史。
  */
-export default function HistoryModal({ onRestore, onClose }: HistoryModalProps) {
+export default function HistoryModal({ authed, onRequireAuth, onRestore, onClose }: HistoryModalProps) {
   const [tab, setTab] = useState<'cloud' | 'local'>('local')
   const [cloudReady, setCloudReady] = useState(false)
 
@@ -41,20 +46,39 @@ export default function HistoryModal({ onRestore, onClose }: HistoryModalProps) 
           <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">🕘 历史记录</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg">✕</button>
         </div>
-        {accountEnabled && cloudReady && (
-          <div className="flex gap-1 mb-3">
-            {(['cloud', 'local'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${tab === t ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 font-medium' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-              >
-                {t === 'cloud' ? '☁️ 云端（随账号）' : '💻 本地'}
-              </button>
-            ))}
+        {accountEnabled && !authed ? (
+          // 未登录：不展示任何历史（需求——未登录不存在历史）
+          <div className="py-10 text-center">
+            <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-900/40 text-2xl">🔐</span>
+            <p className="mt-4 text-sm font-medium text-gray-800 dark:text-gray-100">历史记录为登录用户专属功能</p>
+            <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+              登录后编辑内容自动保存、导出记录云端同步，任意设备都能查看
+            </p>
+            <button
+              onClick={onRequireAuth}
+              className="mt-5 px-6 py-2.5 text-sm font-semibold rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-sm transition-all"
+            >
+              登录 / 注册
+            </button>
           </div>
+        ) : (
+          <>
+            {accountEnabled && cloudReady && (
+              <div className="flex gap-1 mb-3">
+                {(['cloud', 'local'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTab(t)}
+                    className={`px-3 py-1.5 text-sm rounded-md transition-colors ${tab === t ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 font-medium' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  >
+                    {t === 'cloud' ? '☁️ 云端（随账号）' : '💻 本地'}
+                  </button>
+                ))}
+              </div>
+            )}
+            {tab === 'cloud' ? <CloudPane onRestore={onRestore} /> : <LocalPane onRestore={onRestore} />}
+          </>
         )}
-        {tab === 'cloud' ? <CloudPane onRestore={onRestore} /> : <LocalPane onRestore={onRestore} />}
       </div>
     </div>
   )
