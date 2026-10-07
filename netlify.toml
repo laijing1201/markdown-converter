@@ -2,6 +2,28 @@
   command = "npm run build"
   publish = "dist"
 
+# Supabase API 反向代理：国内网络对 *.supabase.co 存在 SNI 阻断，
+# 前端把 VITE_SUPABASE_URL 指向本站点自身域名，由 Netlify 边缘转发到 Supabase。
+# 详见 docs/guides/supabase-api-proxy.md
+[[redirects]]
+  from = "/auth/v1/*"
+  to = "https://whycpppvmxclyuzzctgx.supabase.co/auth/v1/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/rest/v1/*"
+  to = "https://whycpppvmxclyuzzctgx.supabase.co/rest/v1/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/functions/v1/*"
+  to = "https://whycpppvmxclyuzzctgx.supabase.co/functions/v1/:splat"
+  status = 200
+  force = true
+
+# SPA 兜底（放在代理规则之后；已有静态文件如 admin.html 不受影响）
 [[redirects]]
   from = "/*"
   to = "/index.html"

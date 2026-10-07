@@ -1,0 +1,8 @@
+# Netlify 部署的 API 反向代理与 SPA 兜底（与 netlify.toml 保持一致；GitHub Pages 会忽略本文件）
+# 非 force 规则不会遮蔽同名静态文件（如 /admin.html）
+
+/auth/v1/*       https://whycpppvmxclyuzzctgx.supabase.co/auth/v1/:splat       200
+/rest/v1/*       https://whycpppvmxclyuzzctgx.supabase.co/rest/v1/:splat       200
+/functions/v1/*  https://whycpppvmxclyuzzctgx.supabase.co/functions/v1/:splat  200
+
+/*  /index.html  200
