@@ -26,6 +26,14 @@
   text-align: left;
 }
 
+/* 链接：温和蓝 + 下划线（数字文档惯例）。
+ * 预览、PDF 导出（读取计算样式）、docx 导出（固定 2563eb）三端一致。 */
+.md-preview a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .md-preview td,
 .md-preview th {
   text-indent: 0;

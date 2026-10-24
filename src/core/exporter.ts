@@ -257,8 +257,10 @@ async function prepareAssets(root: HTMLElement, ctx: ExportContext, sourceEl: HT
     if (cloneEl.classList.contains('mermaid-rendered')) {
       if (lastDocxStats) lastDocxStats.mermaidTotal++
       if (canPair) {
-        // Mermaid 图形本身是位图/矢量图，用 3× 采样保证打印与缩放清晰（与 PDF 管线一致）
-        tasks.push(captureAsImage(cloneEl, liveEls[i], 3).then((ok) => {
+        // Mermaid：SVG 光栅化（浏览器原生渲染 foreignObject 标签），
+        // html2canvas 仅作兜底 —— 它不渲染 foreignObject，节点文字会被裁切
+        tasks.push(captureMermaidAsImage(cloneEl, liveEls[i], 3).then(async (ok) => {
+          if (!ok) ok = await captureAsImage(cloneEl, liveEls[i], 3)
           if (ok) {
             if (lastDocxStats) lastDocxStats.mermaidCaptured++
           } else {
@@ -354,6 +356,61 @@ async function captureAsImage(cloneEl: HTMLElement, liveEl: HTMLElement, scale =
     return true
   } catch (err) {
     console.warn('export: mermaid/math capture failed', err instanceof Error ? err.message : err)
+    return false
+  }
+}
+
+function loadSvgImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => resolve(null)
+    img.src = src
+  })
+}
+
+/**
+ * Mermaid 图光栅化 —— 与 PDF 管线（pdf/layout.ts prepareImages）完全一致：
+ * SVG 序列化 → Image → canvas ×3。html2canvas 无法渲染 mermaid 默认的
+ * foreignObject 节点标签（节点文字被裁切/丢失），必须交给浏览器原生
+ * SVG 光栅化才能与预览所见一致。
+ */
+async function captureMermaidAsImage(cloneEl: HTMLElement, liveEl: HTMLElement, scale = 3): Promise<boolean> {
+  try {
+    const svg = liveEl.querySelector('svg')
+    if (!svg) return false
+    // mermaid 的 svg 带 width="100%"：无约束时会撑满容器被放大，
+    // 收缩回 viewBox 自然像素尺寸（与网页预览、PDF 导出观感一致）
+    try {
+      const vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number)
+      if (vb.length === 4 && vb[2] > 0) {
+        if (svg.getBoundingClientRect().width > vb[2] + 2) {
+          svg.style.width = `${vb[2]}px`
+          svg.style.height = 'auto'
+          svg.style.maxWidth = 'none'
+        }
+      }
+    } catch { /* ignore */ }
+    const svgRect = svg.getBoundingClientRect()
+    if (svgRect.width <= 0 || svgRect.height <= 0) return false
+    const xml = new XMLSerializer().serializeToString(svg)
+    const img = await loadSvgImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`)
+    if (!img) return false
+    const s = Math.min(scale, 6000 / Math.max(svgRect.width, svgRect.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(svgRect.width * s))
+    canvas.height = Math.max(1, Math.round(svgRect.height * s))
+    canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+    const dataUrl = canvas.toDataURL('image/png')
+
+    const out = cloneEl.ownerDocument.createElement('img')
+    out.src = dataUrl
+    out.style.width = `${svgRect.width}px`
+    out.style.height = `${svgRect.height}px`
+    cloneEl.parentNode?.replaceChild(out, cloneEl)
+    return true
+  } catch (err) {
+    console.warn('export: mermaid svg capture failed', err instanceof Error ? err.message : err)
     return false
   }
 }
