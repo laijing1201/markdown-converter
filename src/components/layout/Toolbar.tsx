@@ -2,6 +2,19 @@ import type { ReactNode } from 'react'
 import type { TemplateId } from '../../core/templates'
 import { DESKTOP_DOWNLOAD_URL } from '../../platform'
 import TemplateQuickSwitch from './TemplateQuickSwitch'
+import {
+  ClockIcon,
+  GearIcon,
+  LinkIcon,
+  MonitorIcon,
+  MoonIcon,
+  PackageIcon,
+  PuzzleIcon,
+  SparklesIcon,
+  SunIcon,
+  UnlinkIcon,
+  WandIcon,
+} from './icons'
 
 interface ToolbarProps {
   busy: boolean
@@ -31,7 +44,7 @@ interface ToolbarProps {
 }
 
 const ghostBtn =
-  'px-3 py-1.5 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors'
+  'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors'
 
 export default function Toolbar({
   busy,
@@ -81,28 +94,28 @@ export default function Toolbar({
           className={ghostBtn}
           title="粘贴 DeepSeek / ChatGPT / Kimi 等 AI 平台的对话分享链接，自动抓取内容转为 Markdown（支持多个链接合并导入）"
         >
-          🔗 链接导入
+          <LinkIcon /> 链接导入
         </button>
         <button
           onClick={onRepairFormat}
           className={ghostBtn}
           title="自动补全未闭合的代码块、公式、粗体，修复表格"
         >
-          🪄 修复格式
+          <WandIcon /> 修复格式
         </button>
         <button
           onClick={onSmartFormat}
           className={ghostBtn}
           title="智能识别并转换普通序号为 Markdown 标题"
         >
-          ✨ 智能排版
+          <SparklesIcon /> 智能排版
         </button>
         <button
           onClick={onDeepFix}
           className={ghostBtn}
           title="AI 内容修复：公式乱码（Word 线性公式 / 定界符 / 裸环境）、Mermaid 图表围栏重建、全角与零宽字符清理、编码乱码，修复后可直接导出 Word"
         >
-          🧩 AI 修复
+          <PuzzleIcon /> AI 修复
         </button>
       </div>
 
@@ -111,10 +124,10 @@ export default function Toolbar({
       {/* 高级设置 / 历史 */}
       <div className="flex gap-1 flex-wrap items-center">
         <button onClick={onOpenSettings} className={ghostBtn} title="字体、字号、行距、页边距、页眉页脚、目录、标题编号等全部导出设置">
-          ⚙ 高级设置
+          <GearIcon /> 高级设置
         </button>
         <button onClick={onOpenHistory} className={ghostBtn} title="历史记录（登录后可用：自动保存、云端同步）">
-          🕘 历史
+          <ClockIcon /> 历史
         </button>
       </div>
 
@@ -135,7 +148,7 @@ export default function Toolbar({
           className={ghostBtn}
           title="批量转换：一次选择多个 .md 文件，统一套用当前模板转为 Word 并打包下载 ZIP"
         >
-          📦 批量转换
+          <PackageIcon /> 批量转换
         </button>
         <button
           onClick={onExportPdf}
@@ -159,14 +172,14 @@ export default function Toolbar({
           className={ghostBtn}
           title={scrollSyncEnabled ? '已开启滚动同步' : '已关闭滚动同步'}
         >
-          {scrollSyncEnabled ? '🔗' : '⛓'}
+          {scrollSyncEnabled ? <LinkIcon /> : <UnlinkIcon />}
         </button>
         <button
           onClick={onToggleDarkMode}
           className={ghostBtn}
           title={darkMode ? '切换亮色模式' : '切换暗色模式'}
         >
-          {darkMode ? '☀' : '🌙'}
+          {darkMode ? <SunIcon /> : <MoonIcon />}
         </button>
         {accountBadge}
         {!desktop && (
@@ -175,7 +188,7 @@ export default function Toolbar({
             className={`${ghostBtn} hidden lg:block text-gray-400 dark:text-gray-500`}
             title="需要打开本地 Markdown、自动保存或桌面文件管理？下载 MarkDoc Desktop（可选增强，在线版功能不受影响）"
           >
-            🖥 桌面版
+            <MonitorIcon /> 桌面版
           </button>
         )}
       </div>
