@@ -184,6 +184,7 @@ export default function App() {
   const [authUser, setAuthUser] = useState<AccountUser | null>(null)
   const [quotaRemaining, setQuotaRemaining] = useState<Remaining | null>(null)
   const [busy, setBusy] = useState(false)
+  const exportInFlightRef = useRef(false)
   const [exportProgress, setExportProgress] = useState<{ pct: number; label: string } | null>(null)
   const [showPdfPreview, setShowPdfPreview] = useState(false)
   const [exportReport, setExportReport] = useState<ExportQualityReport | null>(null)
@@ -610,33 +611,41 @@ export default function App() {
    * 票据成功且已登录 → 异步保存云端历史（不阻塞导出）。
    */
   const runExportGated = useCallback(async (target: 'docx' | 'pdf') => {
-    if (!accountEnabled) {
-      if (target === 'pdf') void doExportPdf()
-      else void doExportDocx()
-      return
-    }
-    const res = await requestExportTicket(target)
-    // 徽标 / 复制拦截依赖的剩余次数视图随票据结果即时刷新（匿名）
-    setQuotaRemaining(res.remaining ?? null)
-    if (res.ok) {
-      if (res.kind === 'user') {
-        void saveCloudHistory({
-          format: target,
-          title: buildExportFilename(markdownContent, settings.documentTitle),
-          contentMd: markdownContent,
-          options: settings as unknown as Record<string, unknown>,
-        })
+    if (exportInFlightRef.current) return
+    exportInFlightRef.current = true
+    setBusy(true)
+    try {
+      if (!accountEnabled) {
+        if (target === 'pdf') await doExportPdf()
+        else await doExportDocx()
+        return
       }
-      if (target === 'pdf') void doExportPdf()
-      else void doExportDocx()
-      return
-    }
-    if (res.reason === 'QUOTA_EXCEEDED') {
-      setAuthModal({ open: true, mode: 'register', banner: res.message, resume: target })
-    } else if (res.reason === 'AUTH_REQUIRED') {
-      setAuthModal({ open: true, mode: 'login', banner: '请先登录后继续导出', resume: target })
-    } else {
-      showToast('⚠️', res.message || '网络错误，请稍后重试')
+      const res = await requestExportTicket(target)
+      // 徽标 / 复制拦截依赖的剩余次数视图随票据结果即时刷新（匿名）
+      setQuotaRemaining(res.remaining ?? null)
+      if (res.ok) {
+        if (res.kind === 'user') {
+          void saveCloudHistory({
+            format: target,
+            title: buildExportFilename(markdownContent, settings.documentTitle),
+            contentMd: markdownContent,
+            options: settings as unknown as Record<string, unknown>,
+          })
+        }
+        if (target === 'pdf') await doExportPdf()
+        else await doExportDocx()
+        return
+      }
+      if (res.reason === 'QUOTA_EXCEEDED') {
+        setAuthModal({ open: true, mode: 'register', banner: res.message, resume: target })
+      } else if (res.reason === 'AUTH_REQUIRED') {
+        setAuthModal({ open: true, mode: 'login', banner: '请先登录后继续导出', resume: target })
+      } else {
+        showToast('⚠️', res.message || '网络错误，请稍后重试')
+      }
+    } finally {
+      exportInFlightRef.current = false
+      setBusy(false)
     }
   }, [markdownContent, settings, doExportDocx, doExportPdf, showToast])
 

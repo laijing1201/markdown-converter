@@ -28,8 +28,8 @@ const QUOTA_CACHE_KEY = 'markdoc.quota.v1'
  * 服务端 export-ticket 是计次权威，但客户端此前存在绕过面（批量转换不申请票据），
  * 且服务端不可达时匿名用户没有可见的额度墙。这里在本地按 deviceId 记录已用次数：
  *   - 默认总额度 1 次（与服务端种子 free_full_uses=1 一致）
- *   - 服务端返回的剩余更多时（管理员调大额度）自动向上对齐，不会错杀
- *   - 服务端返回更少 / 超限 / 不可达时按本地与服务的较小值拦截
+ *   - 每次请求均由服务端判断额度，成功后同步本地剩余（包括管理员调整）
+ *   - 服务端不可达时拒绝导出，本地计次仅用于提示剩余次数
  * 清空浏览器存储会同时重置 deviceId 与本地计次，与「限设备」语义一致（IP 限额兜底）。
  */
 const ANON_USES_KEY = 'markdoc.anon.uses.v1'
@@ -48,7 +48,7 @@ function loadAnonState(): AnonUseState {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<AnonUseState>
       if (parsed.deviceId === deviceId && typeof parsed.used === 'number' && parsed.used >= 0) {
-        const total = typeof parsed.total === 'number' && parsed.total >= ANON_FREE_DEFAULT ? parsed.total : ANON_FREE_DEFAULT
+        const total = typeof parsed.total === 'number' && parsed.total >= 0 ? parsed.total : ANON_FREE_DEFAULT
         return { deviceId, used: Math.min(parsed.used, total), total }
       }
     }
@@ -112,27 +112,6 @@ export async function requestExportTicket(
     }
   } catch { /* 匿名继续 */ }
 
-  // ── 匿名：本地额度墙先行（不依赖服务端可达）────────────────────────────
-  if (!loggedIn) {
-    const localLeft = anonLocalLeft()
-    if (!opts.checkOnly && localLeft <= 0) {
-      const cached = cachedRemaining()
-      const remaining = { deviceLeft: 0, ipLeft: cached?.ipLeft ?? null }
-      cacheRemaining(remaining)
-      return { ok: false, reason: 'QUOTA_EXCEEDED', message: ANON_BLOCK_MESSAGE, remaining }
-    }
-    if (opts.checkOnly && localLeft <= 0) {
-      // 只查询也合并本地视图，保证徽标与墙一致
-      const cached = cachedRemaining()
-      return {
-        ok: true,
-        ticket: 'check',
-        kind: 'anon',
-        remaining: { deviceLeft: 0, ipLeft: cached?.ipLeft ?? null },
-      }
-    }
-  }
-
   let res: Response
   try {
     res = await fetch(`${SUPABASE_URL}/functions/v1/export-ticket`, {
@@ -170,19 +149,12 @@ export async function requestExportTicket(
   }
 
   if (res.ok && body.ok) {
-    if (!loggedIn && opts.checkOnly) {
-      // 只查询：合并本地视图返回，不计次
-      const merged = mergeDeviceLeft(body.remaining?.deviceLeft, anonLocalLeft())
-      const remaining = { deviceLeft: merged, ipLeft: body.remaining?.ipLeft ?? null }
-      cacheRemaining(remaining)
-      return { ok: true, ticket: 'check', kind: body.kind ?? 'anon', remaining }
-    }
     if (!loggedIn) {
-      // 匿名成功：本地计次 +1；服务端总额度更大时向上对齐，剩余取两方较小值
+      // 查询不计次；服务端剩余同时更新本地缓存，允许管理员增减额度。
       const state = loadAnonState()
-      state.used += 1
+      if (!opts.checkOnly) state.used += 1
       const serverLeft = body.remaining?.deviceLeft
-      if (serverLeft != null && serverLeft + state.used > state.total) {
+      if (serverLeft != null) {
         state.total = serverLeft + state.used
       }
       saveAnonState(state)
