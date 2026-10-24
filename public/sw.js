@@ -10,7 +10,7 @@
  * 更新方式：index.html / 静态资源均为网络优先或 SWR，发版后第二次打开即拿到新版。
  */
 
-const VERSION = 'v1.2.0-2'
+const VERSION = 'v1.2.0-3'
 const CACHE_NAME = `markdoc-${VERSION}`
 const PRECACHE = ['./', './index.html', './manifest.webmanifest']
 
@@ -45,13 +45,20 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url)
   if (shouldBypass(url)) return
 
-  // 页面导航：网络优先，断网回退离线壳
+  // 页面导航：网络优先，断网回退离线壳。
+  // 只缓存 2xx 的 HTML——曾经无脑 cache.put 会把网关错误页（404/502…）写进
+  // 缓存，之后断网/回退时用户看到的永远是那张错误页（「打开没渲染」的一类根因）。
   if (req.mode === 'navigate') {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone()
-          caches.open(CACHE_NAME).then((c) => c.put(req, copy))
+          if (res.ok) {
+            const copy = res.clone()
+            caches.open(CACHE_NAME).then((c) => c.put(req, copy))
+          } else {
+            // 网络给了错误页：尝试用缓存里的好壳替代，避免白屏/错误页直接糊脸
+            return caches.match(req).then((hit) => hit ?? caches.match('./index.html').then((h) => h ?? res))
+          }
           return res
         })
         .catch(() => caches.match(req).then((hit) => hit ?? caches.match('./index.html'))),

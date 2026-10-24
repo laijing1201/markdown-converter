@@ -106,11 +106,17 @@ await assert.rejects(context.api('login', {}), e => e.needTotp === true)
 console.log('✓ 401 双因素挑战保留结构化标记')
 
 const listeners = {}, removed = []
-vm.runInNewContext(readFileSync('public/sw.js', 'utf8'), {
+const swCode = readFileSync('public/sw.js', 'utf8')
+const swVersion = (swCode.match(/const VERSION = '([^']+)'/) ?? [])[1]
+if (!swVersion) throw new Error('sw.js 缺少 VERSION 常量')
+const swCacheName = `markdoc-${swVersion}`
+const seededCaches = ['markdoc-v1.2.0', 'markdoc-v1.2.0-2', 'markdoc-fonts-v1', 'other-app']
+if (!seededCaches.includes(swCacheName)) seededCaches.push(swCacheName)
+vm.runInNewContext(swCode, {
   self: { addEventListener: (name, fn) => { listeners[name] = fn }, clients: { claim: async () => {} } },
-  caches: { keys: async () => ['markdoc-v1.2.0', 'markdoc-v1.2.0-2', 'markdoc-fonts-v1', 'other-app'],
+  caches: { keys: async () => seededCaches,
     delete: async name => { removed.push(name); return true } },
 })
 await new Promise((ok, fail) => listeners.activate({ waitUntil: p => p.then(ok, fail) }))
-assert.deepEqual(removed, ['markdoc-v1.2.0'])
+assert.deepEqual(removed, seededCaches.filter((k) => /^markdoc-v\d/.test(k) && k !== swCacheName))
 console.log('✓ SW 只删除旧应用壳、保留字体及其他应用缓存')
