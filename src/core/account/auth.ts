@@ -1,4 +1,5 @@
 import { getSupabase } from './client'
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config'
 
 export interface AccountUser {
   id: string
@@ -25,6 +26,7 @@ export function validateEmail(email: string): string | null {
 function mapAuthError(err: unknown): string {
   const code = (err as { code?: string; message?: string }) ?? {}
   const msg = code.message ?? ''
+  if (msg.startsWith('TIMEOUT')) return '服务暂时不可用，请稍后重试'
   if (code.code === 'over_email_send_rate_limit' || msg.includes('rate limit')) {
     return '验证邮件发送过于频繁，请稍后再试（60 秒内仅 1 封，每日最多 10 封）'
   }
@@ -71,6 +73,51 @@ export async function signIn(email: string, password: string): Promise<AuthResul
   }
 }
 
+/**
+ * 邮件类请求的超时保护：Supabase 项目的邮件发送链路故障时，GoTrue 会在
+ * 服务端卡 ~25 秒后被网关 504，前端若不设超时用户会一直看转圈。
+ * 超时抛出 message 以 'TIMEOUT' 开头的错误，由 mapAuthError 统一翻译。
+ */
+function withTimeout<T>(p: Promise<T>, ms = 20000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('TIMEOUT')), ms)
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v) },
+      (e) => { clearTimeout(timer); reject(e) },
+    )
+  })
+}
+
+/**
+ * 自助注册：优先走 auth-signup Edge Function（service role 直建「已确认」用户，
+ * 注册即登录，不依赖邮件）；端点未部署（404）或不可达时回退 GoTrue 原生注册。
+ *
+ * 背景（2026-10-23）：GoTrue signup 在服务端发确认邮件环节超时（504），
+ * 验证码邮件从未送达，注册完全不可用——故启用免邮件的服务端注册路径。
+ */
+async function signUpViaEdge(email: string, password: string, source: 'web' | 'extension'): Promise<AuthResult | null> {
+  let res: Response
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/auth-signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
+      body: JSON.stringify({ email, password, source }),
+      signal: AbortSignal.timeout(20000),
+    })
+  } catch {
+    return null // 网络不可达 → 回退 GoTrue 路径
+  }
+  if (res.status === 404) return null // 端点未部署 → 回退
+  const body = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string }
+  if (res.ok && body.ok) {
+    const login = await signIn(email, password) // 创建成功 → 立即登录建立会话
+    if (login.ok) return { ok: true, hasSession: true }
+    return { ok: false, message: '注册成功，但自动登录失败，请在登录页输入密码登录' }
+  }
+  if (body.message) return { ok: false, message: body.message }
+  return { ok: false, message: '注册服务暂时不可用，请稍后重试' }
+}
+
 export async function signUp(
   email: string,
   password: string,
@@ -78,15 +125,23 @@ export async function signUp(
   source: 'web' | 'extension' = 'web',
 ): Promise<AuthResult> {
   if (!consent) return { ok: false, message: '请先阅读并同意《隐私政策》与《服务条款》' }
+  const emailError = validateEmail(email)
+  if (emailError) return { ok: false, message: emailError }
   const pwError = validatePassword(password)
   if (pwError) return { ok: false, message: pwError }
+
+  const viaEdge = await signUpViaEdge(email, password, source)
+  if (viaEdge) return viaEdge
+
   try {
     const supabase = await getSupabase()
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { source }, emailRedirectTo: `${location.origin}${location.pathname}` },
-    })
+    const { data, error } = await withTimeout(
+      supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { source }, emailRedirectTo: `${location.origin}${location.pathname}` },
+      }),
+    )
     if (error) return { ok: false, message: mapAuthError(error) }
     // 关闭"自动确认"的正式环境：返回 session 为空，进入验证码校验步骤；
     // 若项目开启了自动确认（session 已建立），调用方可直接进入登录态
@@ -118,9 +173,11 @@ export async function verifySignupCode(email: string, token: string): Promise<Au
 export async function sendPasswordReset(email: string): Promise<AuthResult> {
   try {
     const supabase = await getSupabase()
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${location.origin}${location.pathname}`,
-    })
+    const { error } = await withTimeout(
+      supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${location.origin}${location.pathname}`,
+      }),
+    )
     if (error) return { ok: false, message: mapAuthError(error) }
     return { ok: true }
   } catch (err) {
@@ -142,11 +199,11 @@ export async function updatePassword(newPassword: string): Promise<AuthResult> {
   }
 }
 
-/** 重新发送验证邮件（未登录场景按邮箱重发注册确认） */
+/** 重新发送验证邮件（未登录场景按邮箱重发注册确认；仅旧验证码路径会用到） */
 export async function resendVerification(email: string): Promise<AuthResult> {
   try {
     const supabase = await getSupabase()
-    const { error } = await supabase.auth.resend({ type: 'signup', email })
+    const { error } = await withTimeout(supabase.auth.resend({ type: 'signup', email }))
     if (error) return { ok: false, message: mapAuthError(error) }
     return { ok: true }
   } catch (err) {

@@ -366,7 +366,7 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
                 <a href="./privacy.html" target="_blank" rel="noreferrer" className="text-violet-600 hover:underline dark:text-violet-400">《隐私政策》</a>
                 与
                 <a href="./terms.html" target="_blank" rel="noreferrer" className="text-violet-600 hover:underline dark:text-violet-400">《服务条款》</a>
-                <span className="mt-0.5 block text-gray-400 dark:text-gray-500">邮箱仅用于账号验证与找回密码，可随时注销并删除数据</span>
+                    <span className="mt-0.5 block text-gray-400 dark:text-gray-500">邮箱仅用于账号登录与找回密码，可随时注销并删除数据</span>
               </span>
             </label>
           )}
@@ -378,7 +378,7 @@ export default function AuthModal({ open, initialMode, banner, resumeTarget, onC
               : mode === 'login'
                 ? '登录'
                 : mode === 'register'
-                  ? regStep === 'code' ? '验证并登录' : '获取验证码'
+                  ? regStep === 'code' ? '验证并登录' : '注册'
                   : '发送重置邮件'}
           </button>
 
