@@ -802,9 +802,9 @@ export default function App() {
   useEffect(() => {
     const auth = new URLSearchParams(location.search).get('auth')
     if (!accountEnabled) {
-      // 静态跳转壳（/login.html /register.html）落在未启用部署时给一句实话，不留「点了没反应」
+      // 全站免费开放后不再有登录弹窗：老链接（?auth=register / login）落进来给一句实话
       if (auth === 'register' || auth === 'login') {
-        showToast('ℹ️', '账号体系尚未启用：本部署未接入后端环境，当前为匿名模式（详见管理后台说明页）')
+        showToast('✅', 'MarkDoc 已全面免费开放：无需注册登录，打开即可无限次使用')
       }
       return
     }
@@ -1186,9 +1186,7 @@ export default function App() {
                   </button>
                 </div>
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-3.5">
-                  {accountEnabled
-                    ? '匿名可免费试用 1 次 · 注册登录后云端历史随账号保存 · 内容本地处理'
-                    : '无需登录 · 内容本地处理'}
+                  免费使用 · 无需登录 · 历史自动存本地（最近 10 份）· 内容本地处理
                   {' · Word 公式可编辑 · PDF 文字可搜索'}
                 </p>
               </div>

@@ -216,7 +216,7 @@ function LocalPane({ onRestore }: { onRestore: (entry: HistoryEntry) => void }) 
   return (
     <>
       <div className="flex-1 overflow-y-auto space-y-1.5 min-h-0">
-        {entries.length === 0 && <p className="text-sm text-gray-400 text-center py-10">还没有本地历史，编辑内容后会自动保存在浏览器本地</p>}
+        {entries.length === 0 && <p className="text-sm text-gray-400 text-center py-10">还没有历史记录，编辑内容后会自动保存在浏览器本地（最近 10 份）</p>}
         {entries.map((entry) => (
           <div key={entry.id} className="group flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-600 transition-colors">
             <button onClick={() => onRestore(entry)} className="flex-1 text-left min-w-0" title="恢复这份文档">
@@ -232,7 +232,7 @@ function LocalPane({ onRestore }: { onRestore: (entry: HistoryEntry) => void }) 
         ))}
       </div>
       <div className="flex justify-between items-center pt-3 mt-3 border-t border-gray-100 dark:border-gray-700">
-        <span className="text-xs text-gray-400">🔒 仅保存在浏览器本地，不上传</span>
+        <span className="text-xs text-gray-400">🔒 仅保存在浏览器本地（最近 10 份），不上传</span>
         <button className="text-xs text-gray-400 hover:text-red-500 transition-colors" onClick={() => { clearHistory(); setEntries([]) }}>清空全部</button>
       </div>
     </>

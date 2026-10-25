@@ -343,11 +343,11 @@ export default function Landing({ onEnter, onAuth, leaving = false }: LandingPro
               <p className="mt-7 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-xs text-slate-500">
                 <span className="inline-flex items-center gap-1.5">
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-emerald-400" {...stroke}><path d="M5 13l4 4L19 7" /></svg>
-                  匿名免费试用 1 次
+                  无需注册 · 打开即用
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-emerald-400" {...stroke}><path d="M5 13l4 4L19 7" /></svg>
-                  注册后云端历史 · 导出不限次
+                  完全免费 · 导出不限次
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-emerald-400" {...stroke}><path d="M5 13l4 4L19 7" /></svg>
@@ -564,14 +564,6 @@ export default function Landing({ onEnter, onAuth, leaving = false }: LandingPro
             </div>
             <div className="flex items-center gap-5 text-xs">
               <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="transition-colors hover:text-slate-300">开源地址</a>
-              {accountEnabled ? (
-                <>
-                  <button onClick={() => onAuth('login')} className="transition-colors hover:text-slate-300">登录</button>
-                  <button onClick={() => onAuth('register')} className="transition-colors hover:text-slate-300">注册</button>
-                </>
-              ) : (
-                <a href="./login.html" className="transition-colors hover:text-slate-300">账号入口</a>
-              )}
               <a href="./privacy.html" target="_blank" rel="noreferrer" className="transition-colors hover:text-slate-300">隐私政策</a>
               <a href="./terms.html" target="_blank" rel="noreferrer" className="transition-colors hover:text-slate-300">服务条款</a>
             </div>

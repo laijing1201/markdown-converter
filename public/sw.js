@@ -10,7 +10,7 @@
  * 更新方式：index.html / 静态资源均为网络优先或 SWR，发版后第二次打开即拿到新版。
  */
 
-const VERSION = 'v1.2.0-3'
+const VERSION = 'v1.2.0-4'
 const CACHE_NAME = `markdoc-${VERSION}`
 const PRECACHE = ['./', './index.html', './manifest.webmanifest']
 
