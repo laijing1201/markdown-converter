@@ -87,6 +87,21 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         admin: resolve(__dirname, 'admin.html'),
       },
+      output: {
+        /**
+         * 大体积第三方库拆为独立 vendor chunk：
+         * 应用代码发版时哈希不变，浏览器跨版本复用缓存（GitHub Pages 默认 max-age=600），
+         * 首屏并行下载也更平滑。mermaid 已在 previewDom 中动态 import，无需在此拆分。
+         */
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined
+          // Windows/Linux 路径分隔符兼容
+          if (/[\\/]node_modules[\\/](@codemirror|@lezer|codemirror|@uiw)[\\/]/.test(id)) return 'vendor-codemirror'
+          if (/[\\/]node_modules[\\/]katex[\\/]/.test(id)) return 'vendor-katex'
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'vendor-react'
+          return undefined
+        },
+      },
     },
   },
   define: {

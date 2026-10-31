@@ -16,3 +16,5 @@ Allow: /
 
 User-agent: PerplexityBot
 Allow: /
+
+Sitemap: https://laijing1201.github.io/markdown-converter/sitemap.xml

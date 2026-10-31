@@ -75,7 +75,6 @@
     "mathml2omml": "^0.5.0",
     "mermaid": "^10.6.1",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^6.3.289",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
@@ -94,6 +93,7 @@
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "jsdom": "^29.1.1",
+    "pdfjs-dist": "^6.4.299",
     "pngjs": "^7.0.0",
     "postcss": "^8.4.32",
     "puppeteer-core": "^25.11.0",

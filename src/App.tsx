@@ -1091,6 +1091,7 @@ export default function App() {
           <button
             onClick={() => setDismissedWarnings(warnings.length)}
             className="shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg leading-none"
+            aria-label="关闭警告"
             title="关闭"
           >
             ✕

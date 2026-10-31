@@ -11,7 +11,6 @@
  */
 
 import katex from 'katex'
-import mermaid from 'mermaid'
 import { markdownToSafeHtml } from './markdown'
 import { resolveTemplateBase, type DocSettings } from './templates'
 import { createHeadingCounter, HEADING_NUM_CLASS } from './numbering'
@@ -38,19 +37,29 @@ function renderKatexCached(formula: string, displayMode: boolean): string {
   return html
 }
 
-// ── Mermaid 初始化（模块级只做一次）───────────────────────────────────────
+// ── Mermaid 动态加载（模块级只加载/初始化一次）─────────────────────────────
+//
+// mermaid 体积较大（核心 + 各图型 1MB 级），改为按需动态 import：
+// 不含 Mermaid 图表的文档完全不下载，也不进入首屏主包；
+// 首个 Mermaid 图表出现时才加载，之后模块级单例复用。
 
-let mermaidInit = false
+type Mermaid = typeof import('mermaid')['default']
 
-function ensureMermaidInit() {
-  if (mermaidInit) return
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: 'default',
-    securityLevel: 'strict',
-    fontFamily: 'sans-serif',
-  })
-  mermaidInit = true
+let mermaidPromise: Promise<Mermaid> | null = null
+
+function loadMermaid(): Promise<Mermaid> {
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid').then((mod) => {
+      mod.default.initialize({
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'strict',
+        fontFamily: 'sans-serif',
+      })
+      return mod.default
+    })
+  }
+  return mermaidPromise
 }
 
 // ── 学术启发式（题目/摘要/参考文献识别，仅学术论文模板）─────────────────────
@@ -301,13 +310,11 @@ export function renderMathIn(container: HTMLElement): void {
 
 /** 把容器内 pre>code.language-mermaid 渲染成 .mermaid-rendered SVG（异步） */
 export async function renderMermaidIn(container: HTMLElement): Promise<void> {
-  ensureMermaidInit()
-
   const els = container.querySelectorAll<HTMLElement>('pre > code')
   if (els.length === 0) return
 
-  const tasks: Promise<void>[] = []
-
+  // 先收集待渲染的 Mermaid 代码块，一个都没有就完全不加载 mermaid
+  const blocks: Array<{ pre: HTMLElement; diagramText: string }> = []
   els.forEach((codeEl) => {
     const pre = codeEl.parentElement
     if (!pre) return
@@ -316,8 +323,14 @@ export async function renderMermaidIn(container: HTMLElement): Promise<void> {
     if (!isMermaid) return
     if (pre.dataset.mermaidRendered === 'true') return
 
+    blocks.push({ pre, diagramText: codeEl.textContent || '' })
+  })
+  if (blocks.length === 0) return
+
+  const mermaid = await loadMermaid()
+
+  const tasks: Promise<void>[] = blocks.map(({ pre, diagramText }) => {
     pre.dataset.mermaidRendered = 'true'
-    const diagramText = codeEl.textContent || ''
     const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
     const task = mermaid
@@ -350,7 +363,7 @@ export async function renderMermaidIn(container: HTMLElement): Promise<void> {
         pre.parentNode?.replaceChild(errDiv, pre)
       })
 
-    tasks.push(task)
+    return task
   })
 
   await Promise.allSettled(tasks)

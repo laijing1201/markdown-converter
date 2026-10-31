@@ -126,7 +126,7 @@ export default function Toolbar({
         <button onClick={onOpenSettings} className={ghostBtn} title="字体、字号、行距、页边距、页眉页脚、目录、标题编号等全部导出设置">
           <GearIcon /> 高级设置
         </button>
-        <button onClick={onOpenHistory} className={ghostBtn} title="历史记录（登录后可用：自动保存、云端同步）">
+        <button onClick={onOpenHistory} className={ghostBtn} title="历史记录：编辑内容自动保存在浏览器本地（最近 10 份），无需登录">
           <ClockIcon /> 历史
         </button>
       </div>
@@ -170,6 +170,7 @@ export default function Toolbar({
         <button
           onClick={onToggleScrollSync}
           className={ghostBtn}
+          aria-label={scrollSyncEnabled ? '关闭滚动同步' : '开启滚动同步'}
           title={scrollSyncEnabled ? '已开启滚动同步' : '已关闭滚动同步'}
         >
           {scrollSyncEnabled ? <LinkIcon /> : <UnlinkIcon />}
@@ -177,6 +178,7 @@ export default function Toolbar({
         <button
           onClick={onToggleDarkMode}
           className={ghostBtn}
+          aria-label={darkMode ? '切换亮色模式' : '切换暗色模式'}
           title={darkMode ? '切换亮色模式' : '切换暗色模式'}
         >
           {darkMode ? <SunIcon /> : <MoonIcon />}
