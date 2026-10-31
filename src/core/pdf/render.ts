@@ -88,19 +88,17 @@ export async function renderPdf(
     if (!set) usedChars.set(key, (set = new Set()))
     for (const ch of text) set.add(ch)
   }
+  // 渲染期静态文本按「实际绘制字体」加入字符集（此前对四个字族冗余全加，
+  // 会把未使用的字族也拖进子集化与全量下载）：
+  //   - 页码/页脚/目录条目与点线 → serif（下方 bodyFont）
+  //   - 页眉 → sans（下方 headerFont）
+  //   - 目录标题「目 录」 → sans-bold（drawTocPages），仅存在目录时需要
   addChars('serif', STATIC_TEXT_CHARS)
-  addChars('sans', STATIC_TEXT_CHARS)
-  // 目录标题用 sans-bold、条目/页码用 serif —— 静态字符需覆盖这些字体
-  addChars('serif-bold', STATIC_TEXT_CHARS)
-  addChars('sans-bold', STATIC_TEXT_CHARS)
-  layout.tocEntries.forEach((e) => {
-    addChars('serif', e.text)
-    addChars('sans', e.text)
-  })
-  addChars('serif', settings.headerText)
+  addChars('serif', '　') // 页脚「页脚文字　页码」的全角分隔符
+  layout.tocEntries.forEach((e) => addChars('serif', e.text))
   addChars('serif', settings.footerText)
-  addChars('sans', settings.headerText)
-  addChars('sans', settings.footerText)
+  if (settings.headerText.trim()) addChars('sans', settings.headerText)
+  if (layout.tocEntries.length > 0) addChars('sans-bold', STATIC_TEXT_CHARS)
 
   // ── 缺字回退指派 ────────────────────────────────────────────────────────────
   // Noto Serif/Sans SC 不含的符号（∂ − ⊤ → ★ 等）在子集字体里没有字形，
@@ -113,20 +111,37 @@ export async function renderPdf(
     return (cp >= 0x20 && cp <= 0x7e) || (cp >= 0xa0 && cp <= 0xff) || WINANSI_EXTRA.includes(cp)
   }
   const FALLBACK_KEYS = ['sans', 'serif', 'mono', 'katex:Main', 'katex:AMS']
-  const covKeys = new Set<string>(FALLBACK_KEYS)
-  for (const pageItems of layout.pages) {
-    for (const item of pageItems) {
-      if (item.kind === 'text' && item.fontKey) covKeys.add(item.fontKey)
+  const coverage = new Map<string, Set<number>>()
+  /** 字体覆盖率按需加载（含负缓存）：只为实际绘制/真正发生缺字的字体下载全量字节 */
+  const loadCoverage = async (key: string): Promise<Set<number> | undefined> => {
+    if (!ALL_FONT_FILES[key]) return undefined
+    const hit = coverage.get(key)
+    if (hit) return hit
+    try {
+      const cov = await getFontCoverage(key)
+      coverage.set(key, cov)
+      return cov
+    } catch {
+      coverage.set(key, new Set()) /* 拿不到覆盖率就当不覆盖，走标准字体兜底 */
+      return undefined
     }
   }
-  const coverage = new Map<string, Set<number>>()
-  await Promise.all(
-    [...covKeys].filter((k) => ALL_FONT_FILES[k]).map(async (k) => {
-      try {
-        coverage.set(k, await getFontCoverage(k))
-      } catch { /* 拿不到覆盖率就当不覆盖，走标准字体兜底 */ }
-    }),
-  )
+  const findFallbackCoverage = async (cp: number, exclude: string | undefined): Promise<string | undefined> => {
+    for (const k of FALLBACK_KEYS) {
+      if (k === exclude) continue
+      const cov = await loadCoverage(k) // 惰性：首个缺字出现时才逐个加载剩余回退字体
+      if (cov?.has(cp)) return k
+    }
+    return undefined
+  }
+  // 主字体覆盖率：只为实际绘制到的 fontKey 预载
+  const drawnKeys = new Set<string>()
+  for (const pageItems of layout.pages) {
+    for (const item of pageItems) {
+      if (item.kind === 'text' && item.fontKey) drawnKeys.add(item.fontKey)
+    }
+  }
+  await Promise.all([...drawnKeys].map(loadCoverage))
   const skippedGlyphs = new Set<string>()
   interface RunPlan {
     text: string
@@ -137,7 +152,7 @@ export async function renderPdf(
   for (const pageItems of layout.pages) {
     for (const item of pageItems) {
       if (item.kind !== 'text') continue
-      const primaryCov = item.fontKey ? coverage.get(item.fontKey) : undefined
+      const primaryCov = item.fontKey ? await loadCoverage(item.fontKey) : undefined
       const runs: RunPlan[] = []
       let buf = ''
       let bufKey: string | undefined
@@ -154,7 +169,7 @@ export async function renderPdf(
         if (item.fontKey && primaryCov?.has(cp)) {
           key = item.fontKey
         } else {
-          const alt = FALLBACK_KEYS.find((k) => k !== item.fontKey && coverage.get(k)?.has(cp))
+          const alt = await findFallbackCoverage(cp, item.fontKey)
           if (alt) {
             addChars(alt, ch)
             key = alt

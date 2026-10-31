@@ -314,9 +314,16 @@ export async function ensureFontFace(key: string): Promise<void> {
   faceRegistered.add(key)
 }
 
-/** 布局前批量注册主字体（正文/标题/等宽 × 常规/加粗） */
-export async function ensureMainFontFaces(): Promise<void> {
-  await Promise.allSettled(Object.keys(MAIN_FONT_FILES).map((k) => ensureFontFace(k)))
+/**
+ * 布局前批量注册主字体（正文/标题/等宽 × 常规/加粗）。
+ *
+ * 传入 needed 时只注册子集 —— 主字体中 4 只 CJK 各 6~8MB，首次导出全量注册
+ * 会让用户下载 ~29MB；layout.ts 会按预览 DOM 实际命中的字族/字重计算 needed。
+ * 缺省（不传）注册全量，保持测试与旧调用路径的行为不变。
+ */
+export async function ensureMainFontFaces(needed?: Iterable<string>): Promise<void> {
+  const keys = needed ? [...new Set(needed)].filter((k) => MAIN_FONT_FILES[k]) : Object.keys(MAIN_FONT_FILES)
+  await Promise.allSettled(keys.map((k) => ensureFontFace(k)))
 }
 
 // ── 子集化（harfbuzz wasm）───────────────────────────────────────────────────

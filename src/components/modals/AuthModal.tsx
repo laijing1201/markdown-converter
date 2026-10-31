@@ -9,6 +9,7 @@ import {
   verifySignupCode,
   type AuthResult,
 } from '../../core/account'
+import { useEscapeClose } from './useEscapeClose'
 
 export type AuthModalMode = 'login' | 'register' | 'reset'
 
@@ -89,6 +90,7 @@ function Callout({ tone, children }: { tone: 'error' | 'info' | 'banner'; childr
  * 验证邮件 60 秒冷却（客户端节流 + 服务端频控）。
  */
 export default function AuthModal({ open, initialMode, banner, resumeTarget, onClose, onAuthed }: AuthModalProps) {
+  useEscapeClose(onClose, open)
   const [mode, setMode] = useState<AuthModalMode>(initialMode)
   const [regStep, setRegStep] = useState<'form' | 'code'>('form')
   const [email, setEmail] = useState('')

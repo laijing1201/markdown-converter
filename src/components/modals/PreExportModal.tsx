@@ -1,4 +1,5 @@
 import type { PreflightResult, PreflightTarget } from '../../core/preflight'
+import { useEscapeClose } from './useEscapeClose'
 
 interface PreExportModalProps {
   result: PreflightResult
@@ -10,6 +11,7 @@ interface PreExportModalProps {
 const ISSUE_ICON = { error: '🔴', warn: '🟡' } as const
 
 export default function PreExportModal({ result, target, onExport, onClose }: PreExportModalProps) {
+  useEscapeClose(onClose)
   const { stats, issues } = result
   const errors = issues.filter((i) => i.level === 'error').length
   const warns = issues.length - errors

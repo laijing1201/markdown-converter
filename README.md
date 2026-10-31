@@ -23,7 +23,7 @@ Markdown 是底层技术，不是使用门槛：普通用户不需要懂 Markdow
 粘贴 AI / Markdown 内容 → 实时预览 → 选择模板（通用 / 学术 / 商务）→ 查看「最终效果」→ 导出 Word / PDF
 ```
 
-不注册、不登录、不上传服务器；文档转换（含 PDF 字体子集化）全部在浏览器本地完成。PDF 字体在首次导出时按需加载并缓存，首屏不会下载大字体文件。
+不注册、不登录、不上传服务器；文档转换（含 PDF 字体子集化）全部在浏览器本地完成。PDF 字体在首次导出时**按文档实际用到的字族/字重按需加载**并缓存（Cache API 跨会话缓存），首屏不会下载大字体文件。
 
 > 需要打开本地 Markdown、自动保存或桌面文件管理？可以在 Web 版基础上下载 [MarkDoc Desktop](https://github.com/laijing1201/markdown-converter/releases/latest)（可选增强，在线版功能不受影响）。
 
@@ -77,7 +77,7 @@ Markdown 是底层技术，不是使用门槛：普通用户不需要懂 Markdow
 | PDF 生成 | pdf-lib + @pdf-lib/fontkit（真文本 PDF） |
 | PDF 分页引擎 | 浏览器实测 + 自研分页（`src/core/pdf/layout.ts`） |
 | PDF 字体子集 | harfbuzzjs（hb-subset.wasm） |
-| PDF 字体加载 | 构建期 TTF→WOFF 压缩（四端统一），运行时按需 fetch + Cache API 跨会话缓存（首屏零字体流量，部署体积约省 45%） |
+| PDF 字体加载 | 构建期 TTF→WOFF 压缩（四端统一），运行时按需 fetch（只加载文档实际用到的字族/字重）+ Cache API 跨会话缓存（首屏零字体流量，部署体积约省 45%） |
 | Mermaid/图片（PDF） | SVG → Canvas 3× 光栅嵌入 |
 | 流程图 | Mermaid |
 | 代码高亮 | highlight.js（common 常用语言子集，未收录语言降级为转义纯文本） |

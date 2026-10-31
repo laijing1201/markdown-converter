@@ -11,6 +11,7 @@ import {
 } from '../../core/batchExport'
 import { requestExportTicket } from '../../core/account'
 import type { DocSettings } from '../../core/templates'
+import { useEscapeClose } from './useEscapeClose'
 
 interface BatchExportModalProps {
   settings: DocSettings
@@ -27,6 +28,7 @@ interface BatchExportModalProps {
  * 每个文件转换前申请导出票据（与单篇导出同一执法点）：匿名免费额度用完即中断并引导注册。
  */
 export default function BatchExportModal({ settings, templateLabel, onToast, onBlocked, onClose }: BatchExportModalProps) {
+  useEscapeClose(onClose)
   const [items, setItems] = useState<BatchItem[]>([])
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<BatchProgress | null>(null)

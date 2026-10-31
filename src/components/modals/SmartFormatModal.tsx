@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useEscapeClose } from './useEscapeClose'
 
 interface SmartFormatModalProps {
   onApply: () => void
@@ -6,6 +7,7 @@ interface SmartFormatModalProps {
 }
 
 export default function SmartFormatModal({ onApply, onClose }: SmartFormatModalProps) {
+  useEscapeClose(onClose)
   const [progress, setProgress] = useState(0)
 
   useEffect(() => {

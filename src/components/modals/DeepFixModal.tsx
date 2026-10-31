@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { deepAnalyzeEncoding, type FixCandidate } from '../../core/markdown'
+import { useEscapeClose } from './useEscapeClose'
 import {
   analyzeAiWordProblems,
   fixAiWordContent,
@@ -35,6 +36,7 @@ const CATEGORY_META: CategoryMeta[] = [
 const SCAN_STEPS = ['公式断层检查', '图表错位检查', '结构污染检查', '编码乱码检查']
 
 export default function DeepFixModal({ content, onApply, onApplyAndExport, onClose }: DeepFixModalProps) {
+  useEscapeClose(onClose)
   const [phase, setPhase] = useState<Phase>('scanning')
   const [progress, setProgress] = useState(0)
   const [stepIdx, setStepIdx] = useState(-1)

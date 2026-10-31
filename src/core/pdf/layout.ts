@@ -226,6 +226,47 @@ function harmonizeFonts(root: HTMLElement): void {
   })
 }
 
+/**
+ * 收集本次导出真正需要注册 FontFace 的主字体键（按需加载）。
+ *
+ * 主字体中 4 只 CJK 各 6~8MB，此前每次导出无条件全量注册（首导 ~29MB 下载）。
+ * 实际绘制只用其中一部分，这里以预览 DOM 的 computed style 逐元素判定
+ * （与 harmonizeFonts 同一套 resolveFontFamily 映射，保证测量与绘制一致），
+ * 再叠加渲染期静态文本的保底规则：
+ *   - serif 恒需：导出克隆正文固定为 MarkDoc Serif，页码/页脚/目录条目也以 serif 绘制
+ *   - 任一标题 → sans + sans-bold（标题字体；目录标题恒以 sans-bold 绘制）
+ *   - 页眉文字 → sans（render.ts headerFont 用 sans 绘制）
+ *   - 文档含 CJK → sans（等宽内 CJK 簇绘制时回退黑体、未知族兜底同为黑体系）
+ * 等宽/粗体变体按元素实际命中收集，一个都没命中就不下载。
+ */
+function collectNeededMainFontKeys(root: HTMLElement, settings: DocSettings): Set<string> {
+  const needed = new Set<string>(['serif'])
+  const add = (key: string) => {
+    if (MAIN_FONT_FILES[key]) needed.add(key)
+  }
+
+  root.querySelectorAll<HTMLElement>('*').forEach((el) => {
+    if (el.closest('svg')) return
+    const cs = getComputedStyle(el)
+    if (/katex/i.test(cs.fontFamily)) return // 公式字形由渲染期矢量路径绘制，不走主字体
+    const bold = Number(cs.fontWeight) >= 600 || cs.fontWeight === 'bold'
+    const res = resolveFontFamily(cs.fontFamily, bold, cs.fontStyle === 'italic')
+    add(res.fontKey)
+    // 与布局簇规则一致：等宽内 CJK 字符绘制时回退黑体（见簇收集 clusterFontKey）
+    if (res.fontKey.startsWith('mono') && hasCJK(el.textContent ?? '')) {
+      add(res.fontKey.endsWith('-bold') ? 'sans-bold' : 'sans')
+    }
+  })
+
+  if (root.querySelector('h1, h2, h3, h4, h5, h6')) {
+    add('sans')
+    add('sans-bold')
+  }
+  if (settings.headerText.trim()) add('sans')
+  if (hasCJK(root.textContent ?? '')) add('sans')
+  return needed
+}
+
 /** 每字体族的基线占比校准：baseline = 盒 top + ascRatio × 盒高 */
 function calibrateAsc(root: HTMLElement): Map<string, number> {
   const ratios = new Map<string, number>()
@@ -1421,7 +1462,7 @@ export async function runLayout(
 
   try {
     hooks.onProgress?.('prepare', 0, 1)
-    await ensureMainFontFaces()
+    await ensureMainFontFaces(collectNeededMainFontKeys(livePreview, settings))
     await (document as Document & { fonts?: FontFaceSet }).fonts?.ready
 
     // 3. 克隆预览 DOM 并做导出变换

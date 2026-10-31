@@ -7,6 +7,7 @@
  */
 
 import { platform } from '../../platform'
+import { useEscapeClose } from './useEscapeClose'
 
 export interface ExportQualityReport {
   durationMs: number
@@ -68,6 +69,7 @@ function StatChip({ ok, label, detail }: { ok: boolean; label: string; detail: s
 }
 
 export default function ExportReportModal({ report, onClose }: ExportReportModalProps) {
+  useEscapeClose(onClose)
   const mathOk = report.mathTotal - report.degraded.length
   const allMathOk = report.degraded.length === 0
   const allMermaidOk = report.mermaidCaptured >= report.mermaidTotal

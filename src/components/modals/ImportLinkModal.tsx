@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { useEscapeClose } from './useEscapeClose'
 import {
   detectChatPlatform,
   importChatLinks,
@@ -24,6 +25,7 @@ type LinkStatus =
  * 抓取成功后合并为一份 Markdown 交给编辑器。
  */
 export default function ImportLinkModal({ onApply, onClose }: ImportLinkModalProps) {
+  useEscapeClose(onClose)
   const [raw, setRaw] = useState('')
   const [busy, setBusy] = useState(false)
   const [statuses, setStatuses] = useState<Record<string, LinkStatus>>({})

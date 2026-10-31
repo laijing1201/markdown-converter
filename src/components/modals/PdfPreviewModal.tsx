@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { runLayout, type ImageQuality, type LayoutResult } from '../../core/pdf/layout'
 import { renderPageToCanvas } from '../../core/pdf/canvasPreview'
 import type { DocSettings } from '../../core/templates'
+import { useEscapeClose } from './useEscapeClose'
 
 interface PdfPreviewModalProps {
   previewEl: HTMLElement
@@ -17,6 +18,7 @@ interface PdfPreviewModalProps {
  * 用于在导出前检查分页位置（哪里换页、表格/图片/标题落点）。
  */
 export default function PdfPreviewModal({ previewEl, settings, onClose, onExport, exporting, imageQuality }: PdfPreviewModalProps) {
+  useEscapeClose(onClose)
   const [layout, setLayout] = useState<LayoutResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pageWidth, setPageWidth] = useState(560)

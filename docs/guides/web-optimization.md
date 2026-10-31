@@ -1,9 +1,9 @@
 # MarkDoc Web 端优化记录与待办
 
-> 本文记录 2026-10 一轮 Web 端体检的结论：已落地的优化、以及经评估暂不做的
-> 已知问题（附原因与建议方案），供后续迭代参考。
+> 本文记录 2026-10 两轮 Web 端体检的结论：已落地的优化、以及经评估维持现状的
+> 已知问题（附原因），供后续迭代参考。
 
-## 已落地（本轮）
+## 已落地（第一轮）
 
 ### 1. Mermaid 改为动态 import（首屏主包瘦身）
 
@@ -25,8 +25,6 @@
 
 - 新增 `public/sitemap.xml`（主站 / 隐私 / 条款三页），`public/robots.txt`
   末尾补 `Sitemap:` 行。
-- `index.html`：补 `og:image:width/height/alt`（1024×1024）与
-  `twitter:image` / `twitter:image:alt`。
 - 管理后台 `admin.html` 已有 `noindex, nofollow`，不进 sitemap（维持现状）。
 
 ### 4. PWA manifest 清理
@@ -51,41 +49,68 @@
 - `.github/workflows/deploy.yml`：`npm install` → `npm ci`，保证 CI 构建
   与 package-lock 完全一致。
 
-## 已知问题与待办（本轮未做，按影响排序）
+## 已落地（第二轮）
 
-### A. PDF 首次导出需下载全部 6 只主字体（~29MB）⚡ 影响最大
+### 7. PDF 导出字体按需加载（首导下载 ~29MB → 按文档实际所需）⚡
 
-- 现状：`src/core/pdf/layout.ts` 在布局开头无条件 `ensureMainFontFaces()`，
-  4 只思源字体各 6~8.4MB WOFF，无论文档是否包含中文、模板是否用到该字重，
-  首次导出都要拉全量（有 Cache API 跨会话缓存，仅首次慢；移动端尤其明显）。
-- 建议方案：按文档实际字符集（是否含 CJK）与 `DocSettings` 实际命中的
-  字体族/字重惰性加载；需要同时调整 fallback 链，避免「全英文文档 + 中文
-  字体」场景缺字形。改动面在 `src/core/pdf/fonts.ts` + `layout.ts`，需配合
-  `test:pdf:visual` 回归。
+此前三处无条件全量下载 6 只主字体（4 只思源 CJK 各 6~8MB WOFF）：
 
-### B. og:image 是 630KB 的「假 PNG」
+1. `layout.ts` 测量前 `ensureMainFontFaces()` 全量注册；
+2. `render.ts` 缺字回退覆盖率（`FALLBACK_KEYS`）无条件下载 sans/serif/mono 全量字节；
+3. `render.ts` 静态字符（目录/页码）对 serif/sans/serif-bold/sans-bold 四族冗余全加，
+   把未使用的字族也拖进子集化。
 
-- `public/icon-v3.png` 实为 JPEG（1024×1024，扩展名误导）；作为社交分享图
-  偏大，且 electron-builder 的 `build.icon` 也指向它（要求真 PNG）。
-- 建议：用图像工具转出真 PNG（≥512×512）替换或另存 `og-image.png` 并压缩
-  到 <200KB；同步更新 `index.html` 与 `package.json` 的 `build.icon`。
+现在的行为（**PDF 输出内容不变**，已被 `test-pdf-writer.ts` 的 pdfjs 文本提取
+逐项验证）：
 
-### C. 弹窗可访问性：Escape 关闭与焦点管理
+- **layout.ts**：新增 `collectNeededMainFontKeys(livePreview, settings)` —— 以预览
+  DOM 的 computed style 逐元素判定（与 `harmonizeFonts` 同一套
+  `resolveFontFamily` 映射），叠加渲染期静态文本保底规则：
+  serif 恒需（正文固定 + 页码/页脚/目录条目）；任一标题 → sans + sans-bold
+  （目录标题恒以 sans-bold 绘制）；页眉文字 → sans（`headerFont` 用 sans）；
+  文档含 CJK → sans（等宽内 CJK 回退黑体、未知族兜底）；等宽/粗体变体按实际命中。
+  例：纯文字无代码无标题的文档只注册 serif 一族（约 8MB → 实际下载仅 8MB 中的一只），
+  典型文档跳过未使用的粗体/等宽变体。
+- **fonts.ts**：`ensureMainFontFaces(needed?)` 支持传子集（缺省全量，测试与旧路径不变）。
+- **render.ts**：覆盖率改为惰性加载——只为实际绘制的 fontKey 预载；
+  回退链（sans → serif → mono → katex:Main → katex:AMS）在**首个缺字出现时**
+  才逐个加载，指派顺序与结果与此前完全一致；静态字符按「实际绘制字体」
+  裁剪（页眉→sans、目录标题→sans-bold 仅存在目录时、页码/页脚/条目→serif），
+  并补上页脚「文字　页码」全角分隔符的字形。
+- Cache API 跨会话缓存不变：同一设备只有第一次导出需要下载，之后命中本地缓存。
 
-- 12 个 Modal 中仅 DocumentSettingsModal / AuthModal 处理了按键；
-  无 focus trap，Toast 为可点击 `div` 无键盘可达，移动端 tablist 无方向键
-  导航与 `aria-controls`。
-- 建议：抽一个 `useEscapeClose(onClose)` + 通用 focus-trap hook，先覆盖
-  内容型弹窗（History / DeepFix / SmartFormat / PreExport / ImportLink /
-  Batch / ExportReport）；ExportProgressModal 等进度类弹窗需确认业务上
-  是否允许中途关闭再接入。
+### 8. 社交分享图（og:image）正确化
 
-### D. 部署体积小项
+- `public/icon-v3.png` 实为 630KB 的 JPEG（历史遗留，扩展名误导；
+  pngjs 无法解码）。新增 `scripts/generate-og-image.mjs`
+  （`npm run icons:og`，puppeteer-core + 系统 Chrome/Edge canvas 解码，
+  与 `generate-pwa-icons.mjs` 同一方案）生成 `public/og-image.jpg`
+  （1024×1024 JPEG q85，**95KB**，约为源图 1/8）。
+- `index.html` og:image / twitter:image 指向 `og-image.jpg`（带尺寸与 alt）。
+- `icon-v3.png` 本身保留：它仍是 electron-builder `build.icon` 与
+  `generate-pwa-icons.mjs` 的输入；electron-builder 若要求真 PNG 可后续替换。
 
-- `dist/assets/KaTeX_*`（~1.2MB，预览公式渲染用，浏览器只取 woff2）与
-  `dist/fonts/katex/`（~340KB TTF，PDF 嵌入用）双份部署——用途不同，
-  合计可接受；若要省可评估预览侧换 CDN 或子集化。
-- `admin.html` 与主站共用 CSS chunk（含 KaTeX CSS），后台并不渲染公式；
-  可给 admin 单独入口样式或接受现状。
-- `public/_redirects` 与 `netlify.toml` 为 Netlify 部署链路配置（国内
-  Supabase SNI 反代在用），GitHub Pages 忽略之，**不要删除**。
+### 9. 弹窗键盘可访问性：Escape 关闭
+
+- 新增 `src/components/modals/useEscapeClose.ts`：Escape 触发 `onClose`，
+  与背景点击 / ✕ 按钮行为对齐；嵌套弹窗只关最上层（挂载顺序栈）；
+  已被 preventDefault 的 Escape（如 DocumentSettingsModal 内部取消重命名）不响应。
+- 接入 9 个弹窗：History / DeepFix / SmartFormat / PreExport / ExportReport /
+  ImportLink / BatchExport / Auth / PdfPreview。
+- **有意不接入**：ExportProgressModal（导出中不允许关闭）、AccountModal
+  （背景点击本就不关闭，只有「关闭」按钮）、DocumentSettingsModal
+  （内部有细粒度 Escape 处理，避免双重响应）。
+
+## 维持现状（评估过，不改）
+
+- **`netlify.toml` / `public/_redirects`**：Netlify 部署链路配置（国内 Supabase
+  SNI 同源反代在用），GitHub Pages 忽略之，**不要删除**。
+- **KaTeX 字体双份部署**：`dist/assets/KaTeX_*`（~1.2MB，预览公式渲染，
+  浏览器只取 woff2）与 `dist/fonts/katex/`（~340KB TTF，PDF 嵌入）用途不同，
+  合计可接受。
+- **admin.html 与主站共用 CSS chunk**（含 KaTeX CSS ~100KB）：后台不渲染公式
+  但共用构建产物；单独入口样式收益有限。
+- **PDF 商务模板正文强制 Serif**：导出克隆固定 `--pd-body-font: MarkDoc Serif`
+  （layout.ts），与模板/预览的正文字体（商务模板为雅黑系）存在既有的观感差异；
+  改动会变更既有 PDF 输出并需重制视觉 baseline（`tests/pdf/baseline`），
+  需要产品决策后再做。

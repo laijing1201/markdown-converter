@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { loadHistory, deleteHistory, clearHistory, formatHistoryTime, type HistoryEntry } from '../../core/history'
 import { getSupabase, accountEnabled, importLocalHistoryToCloud } from '../../core/account'
+import { useEscapeClose } from './useEscapeClose'
 
 interface HistoryModalProps {
   /** 当前是否已登录（账号体系启用时，未登录不允许使用历史） */
@@ -27,6 +28,7 @@ interface CloudEntry {
  * 未启用账号体系的旧部署回退为浏览器本地历史（不上传）。
  */
 export default function HistoryModal({ authed, onRequireAuth, onRestore, onClose }: HistoryModalProps) {
+  useEscapeClose(onClose)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
