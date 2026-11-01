@@ -11,8 +11,9 @@ export default function SmartFormatModal({ onApply, onClose }: SmartFormatModalP
   const [progress, setProgress] = useState(0)
 
   useEffect(() => {
-    // Fake progress animation
-    const duration = 2000 // 2 seconds total
+    // 排版引擎实际执行 <100ms（5MB 实测 63ms），进度动画只是节奏反馈：
+    // 1.2s 保持完整步骤展示的同时不再让人干等
+    const duration = 1200
     const interval = 50
     const steps = duration / interval
     let currentStep = 0

@@ -163,8 +163,23 @@ function loadA4Mode(): boolean {
 
 export default function App() {
   const [markdownContent, setMarkdownContent] = useState('')
-  const [darkMode, setDarkMode] = useState(false)
-  const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true)
+  // 偏好初始化：上次的选择 > 系统深色 > 默认值
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('markdoc.uiPrefs.v1') ?? '{}') as { darkMode?: boolean; scrollSyncEnabled?: boolean }
+      if (typeof saved.darkMode === 'boolean') return saved.darkMode
+    } catch { /* ignore */ }
+    try {
+      return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches
+    } catch { return false }
+  })
+  const [scrollSyncEnabled, setScrollSyncEnabled] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('markdoc.uiPrefs.v1') ?? '{}') as { darkMode?: boolean; scrollSyncEnabled?: boolean }
+      if (typeof saved.scrollSyncEnabled === 'boolean') return saved.scrollSyncEnabled
+    } catch { /* ignore */ }
+    return true
+  })
   const [editorScrollEl, setEditorScrollEl] = useState<HTMLElement | null>(null)
   const [previewScrollEl, setPreviewScrollEl] = useState<HTMLElement | null>(null)
   const [dismissedWarnings, setDismissedWarnings] = useState<number>(0)
@@ -346,13 +361,17 @@ export default function App() {
   }, [scrollSyncEnabled, editorScrollEl, previewScrollEl])
 
   // ── Dark mode ────────────────────────────────────────────────────────────
+  // 偏好持久化（刷新后保持）；首次访问跟随系统深色设置
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark')
     } else {
       document.documentElement.classList.remove('dark')
     }
-  }, [darkMode])
+    try {
+      localStorage.setItem('markdoc.uiPrefs.v1', JSON.stringify({ darkMode, scrollSyncEnabled }))
+    } catch { /* 存储不可用时静默 */ }
+  }, [darkMode, scrollSyncEnabled])
 
   // ── History autosave (debounced) ─────────────────────────────────────────
   // 需求：历史跟随账号——登录后编辑自动保存进云端（与导出同一列表，最多 10 条，
