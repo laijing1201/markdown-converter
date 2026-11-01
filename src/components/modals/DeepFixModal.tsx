@@ -263,14 +263,16 @@ export default function DeepFixModal({ content, onApply, onApplyAndExport, onClo
           {hasAnyProblem && (
             <button
               onClick={() => handleApply(true)}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+              disabled={phase !== 'complete'}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               修复并导出 Word
             </button>
           )}
           <button
             onClick={() => (hasAnyProblem ? handleApply(false) : onClose())}
-            className="px-5 py-2 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors"
+            disabled={phase !== 'complete' && hasAnyProblem}
+            className="px-5 py-2 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {phase === 'complete' ? (hasAnyProblem ? `应用修复（${totalFixCount} 处）` : '关闭') : '分析中...'}
           </button>

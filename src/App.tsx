@@ -468,7 +468,10 @@ export default function App() {
   }, [showToast])
 
   const handleRepairFormat = useCallback(() => {
-    if (!markdownContent.trim()) return
+    if (!markdownContent.trim()) {
+      showToast('💡', '当前没有可修复的内容')
+      return
+    }
     const { fixed, fixes } = repairAiMarkdown(markdownContent)
     if (fixes.length === 0) {
       showToast('✓', '未发现可自动修复的问题')
@@ -483,14 +486,38 @@ export default function App() {
     showToast('🧩', result.summary[0] ?? '已应用 AI 内容修复', result.summary.slice(1, 4))
   }, [showToast])
 
-  /** 「修复并导出 Word」：应用修复 → 等预览刷新 → 直接走导出链路 */
+  // ── 「修复并导出 Word」：应用修复 → 等预览真正渲染出这份内容 → 再走导出链路。
+  // 此前是固定 600ms 定时，Mermaid 动态 import 慢时图表会以源码降级进 Word（竞态）。
   const exportWordRef = useRef<(() => void) | null>(null)
   exportWordRef.current = () => handleExport('docx')
+  const pendingExportContentRef = useRef<string | null>(null)
+  const exportFallbackTimerRef = useRef<number | null>(null)
+
+  const handleContentRendered = useCallback((rendered: string) => {
+    if (pendingExportContentRef.current !== null && rendered === pendingExportContentRef.current) {
+      pendingExportContentRef.current = null
+      if (exportFallbackTimerRef.current) {
+        clearTimeout(exportFallbackTimerRef.current)
+        exportFallbackTimerRef.current = null
+      }
+      // 下一帧再导出：确保本轮渲染彻底收尾（busy 状态、DOM 事件等）
+      setTimeout(() => exportWordRef.current?.(), 50)
+    }
+  }, [])
+
   const handleDeepFixApplyAndExport = useCallback((result: { fixed: string; summary: string[] }) => {
     setMarkdownContent(result.fixed)
     showToast('🧩', result.summary[0] ?? '已应用 AI 内容修复', result.summary.slice(1, 4))
-    // 等待受控预览（useDeferredValue）刷新后再导出，导出读取的是预览 DOM
-    setTimeout(() => exportWordRef.current?.(), 600)
+    // 等待预览渲染出与 result.fixed 一致的内容（onContentRendered 精确匹配），
+    // 8s 兜底：极端情况（渲染管线异常/标签页休眠）下仍然导出
+    pendingExportContentRef.current = result.fixed
+    if (exportFallbackTimerRef.current) clearTimeout(exportFallbackTimerRef.current)
+    exportFallbackTimerRef.current = window.setTimeout(() => {
+      if (pendingExportContentRef.current !== null) {
+        pendingExportContentRef.current = null
+        exportWordRef.current?.()
+      }
+    }, 8000)
   }, [showToast])
 
   const handleSmartFormatApply = useCallback(() => {
@@ -690,6 +717,11 @@ export default function App() {
 
   // ── Rich copy（粘贴进 Word 保留排版）──────────────────────────────────────
   const handleCopyRich = useCallback(async () => {
+    // 空文档时预览渲染的是示例内容（DEFAULT_CONTENT），不拦截会把示例复制进剪贴板
+    if (!markdownContent.trim()) {
+      showToast('💡', '当前没有可复制的内容')
+      return
+    }
     const previewEl = document.getElementById(previewId)
     if (!previewEl) return
     // 复制与导出同属「把排版结果拿走」：匿名免费额度用完后同样引导注册
@@ -717,7 +749,7 @@ export default function App() {
         showToast('⚠️', '复制失败，请手动选择内容复制')
       }
     }
-  }, [showToast, authUser, quotaRemaining])
+  }, [showToast, authUser, quotaRemaining, markdownContent])
 
   const handleRestoreHistory = useCallback((entry: HistoryEntry) => {
     setMarkdownContent(entry.content)
@@ -1236,6 +1268,7 @@ export default function App() {
                 <button
                   role="tab"
                   aria-selected={!showPdfPreview}
+                  onClick={() => setShowPdfPreview(false)}
                   className={`px-2 py-0.5 transition-colors ${
                     !showPdfPreview
                       ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-300 font-semibold'
@@ -1286,6 +1319,7 @@ export default function App() {
               a4Mode={a4Mode}
               onScrollContainerReady={setPreviewScrollEl}
               onRendered={onPreviewRendered}
+              onContentRendered={handleContentRendered}
             />
           </div>
         </div>

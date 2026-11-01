@@ -44,13 +44,24 @@ export default function BatchExportModal({ settings, templateLabel, onToast, onB
       onToast('⚠️', '未找到可导入的文件：仅支持 .md / .markdown / .txt')
       return
     }
+    const seen = new Set(items.map((p) => p.fileName))
+    const added: typeof read = []
+    let dropped = 0
+    for (const r of read) {
+      if (seen.has(r.fileName)) { dropped++; continue }
+      seen.add(r.fileName)
+      added.push(r)
+    }
     setItems((prev) => {
-      const seen = new Set(prev.map((p) => p.fileName))
-      return [...prev, ...read.filter((r) => !seen.has(r.fileName))]
+      // prev 可能已包含本轮 added（连点两次选择同一文件）：再滤一遍防重复
+      const s = new Set(prev.map((p) => p.fileName))
+      return [...prev, ...added.filter((r) => !s.has(r.fileName) && s.add(r.fileName))]
     })
+    // 同名文件不再静默丢弃：明确告知用户跳过了几个
+    if (dropped > 0) onToast('ℹ️', `已跳过 ${dropped} 个同名文件（列表中已存在同名文档）`)
     setResults(null)
     setZipBlob(null)
-  }, [onToast])
+  }, [items, onToast])
 
   const handleStart = useCallback(async () => {
     if (items.length === 0) return

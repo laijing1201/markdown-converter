@@ -16,8 +16,8 @@ import type {
 import { buildChatDocument, type AccumulatedStats } from '../extraction/chatDocument'
 import type { ExtractResult } from '../extraction/domToMarkdown'
 import { extractFormulas } from '../../../src/core/mathSyntax'
-import { seedSettingsFromTemplate } from '../../../src/core/templates'
-import { loadQuickSettings, stageExportJob, stageImport, recordExportResult } from '../storage'
+import { seedSettingsFromTemplate, TEMPLATE_CONFIGS } from '../../../src/core/templates'
+import { loadQuickSettings, stageExportJob, stageImport, recordExportResult, extensionTemplateStorage } from '../storage'
 import { MarkDocExtError } from '../errors'
 import type { ChatPlatformAdapter } from '../types'
 
@@ -36,6 +36,17 @@ async function settingsFor(): Promise<{ settings: ReturnType<typeof seedSettings
     template: quick.templateId,
     includeToc: quick.includeToc,
     includePageNumbers: quick.includePageNumbers,
+  }
+  // 自定义模板：合入其完整排版设置（此前只换 templateId，自定义模板等于没选）
+  if (!(quick.templateId in TEMPLATE_CONFIGS)) {
+    const tpl = (await extensionTemplateStorage.listTemplates()).find((t) => t.id === quick.templateId)
+    if (tpl) {
+      Object.assign(settings, tpl.settings, {
+        template: tpl.id,
+        includeToc: quick.includeToc,
+        includePageNumbers: quick.includePageNumbers,
+      })
+    }
   }
   return { settings, quick }
 }

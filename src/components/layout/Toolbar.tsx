@@ -92,7 +92,7 @@ export default function Toolbar({
         <button
           onClick={onImportLink}
           className={ghostBtn}
-          title="粘贴 DeepSeek / ChatGPT / Kimi 等 AI 平台的对话分享链接，自动抓取内容转为 Markdown（支持多个链接合并导入）"
+          title="粘贴 DeepSeek / ChatGPT / Kimi 等 AI 平台的对话分享链接，自动抓取内容转为 Markdown（一行一个可合并导入；须为公开链接，需登录或人机验证的页面会给出原因）"
         >
           <LinkIcon /> 链接导入
         </button>

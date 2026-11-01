@@ -85,6 +85,11 @@ const PREVIEW_ID = 'preview-container'
 /** 需要"克隆 DOM ↔ 实时预览"配对捕获的元素 */
 const CAPTURE_SELECTOR = '.mermaid-rendered, .math-block, .math-inline'
 
+// 截图期间的暗色主题摘除（与 PDF 管线 layout.ts 同策略）：暗色下预览文字是
+// 浅色，html2canvas 强制白底会把降级公式截图画成「白底浅字」几乎不可见
+let docxStageCount = 0
+let docxStageRemovedDark = false
+
 const HEADING_STYLE_LEVEL: Record<string, number> = { Heading1: 1, Heading2: 2, Heading3: 3 }
 
 /**
@@ -107,7 +112,21 @@ export async function buildDocxBlob(innerHtml: string, options: ExportOptions): 
     tables: 0, tablesFromEmbeddedText: 0, mermaidTotal: 0, mermaidCaptured: 0,
   }
 
-  await prepareAssets(root, ctx, options.sourceEl ?? null)
+  docxStageCount++
+  const prevDark = document.documentElement.classList.contains('dark')
+  if (prevDark && docxStageCount === 1 && !docxStageRemovedDark) {
+    document.documentElement.classList.remove('dark')
+    docxStageRemovedDark = true
+  }
+  try {
+    await prepareAssets(root, ctx, options.sourceEl ?? null)
+  } finally {
+    docxStageCount--
+    if (docxStageCount === 0 && docxStageRemovedDark) {
+      document.documentElement.classList.add('dark')
+      docxStageRemovedDark = false
+    }
+  }
 
   // 2. Convert DOM to docx elements
   const state: ParseState = { h1Count: 0, isReferenceSection: false, figCount: 0, tblCount: 0, quoteDepth: 0 }

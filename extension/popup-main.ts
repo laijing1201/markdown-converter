@@ -4,7 +4,7 @@
  */
 
 import type { ContentStateResponse } from './src/types'
-import { loadQuickSettings, saveQuickSettings } from './src/storage'
+import { loadQuickSettings, saveQuickSettings, extensionTemplateStorage } from './src/storage'
 import { TEMPLATE_CONFIGS, TEMPLATE_ORDER, type TemplateId } from '../src/core/templates'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
@@ -126,10 +126,8 @@ async function initTemplateSelect(): Promise<void> {
     opt.textContent = TEMPLATE_CONFIGS[id as TemplateId].name
     select.appendChild(opt)
   }
-  const custom = (await chrome.storage.local.get('markdoc.ext.customTemplates.v1'))['markdoc.ext.customTemplates.v1'] as
-    | Array<{ id: string; name: string }>
-    | undefined
-  for (const t of custom ?? []) {
+  const custom = await extensionTemplateStorage.listTemplates()
+  for (const t of custom) {
     const opt = document.createElement('option')
     opt.value = t.id
     opt.textContent = `${t.name}（自定义）`

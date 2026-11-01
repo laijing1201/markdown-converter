@@ -37,6 +37,13 @@ function hostAllowed(hostname: string): boolean {
   return [...ALLOWED_HOSTS].some((h) => host === h || host.endsWith(`.${h}`))
 }
 
+/** 200 但内容实为人机验证/挑战页（Cloudflare 等）——不能当正文返回 */
+function isChallengePage(html: string): boolean {
+  const head = html.slice(0, 6000)
+  return /just a moment|attention required|cf-browser-verification|cf_chl|challenge-platform|checking your browser|verify you are human|安全验证|访问验证/i
+    .test(head)
+}
+
 function badRequest(message: string, status = 400) {
   return json({ error: message }, status)
 }
@@ -104,8 +111,20 @@ Deno.serve(async (req: Request) => {
     break
   }
 
+  if (status === 403) {
+    return json({
+      error: '分享页返回 403：平台人机验证（如 Cloudflare）拦截了服务端抓取，或该链接需要登录',
+      hint: '请在浏览器打开链接确认内容可见，然后手动复制 AI 回复粘贴到编辑器',
+    }, 200)
+  }
   if (status !== 200) return json({ error: `分享页返回 ${status}，链接可能已失效或需要登录`, status }, 200)
   if (!html) return json({ error: '页面内容为空' }, 200)
+  if (isChallengePage(html)) {
+    return json({
+      error: '平台人机验证拦截了抓取（分享页启用了防机器人防护）',
+      hint: '请在浏览器打开链接确认内容可见，然后手动复制 AI 回复粘贴到编辑器',
+    }, 200)
+  }
 
   if (raw) return json({ kind: 'json', body: html, finalUrl: current.href })
   return json({ kind: 'html', html, finalUrl: current.href })

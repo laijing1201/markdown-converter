@@ -10,13 +10,15 @@ interface PreviewPanelProps {
   onScrollContainerReady: (el: HTMLElement | null) => void
   /** 每次预览渲染管线完成时回调（KaTeX/Mermaid 均就位），供状态条估算页数等 */
   onRendered?: () => void
+  /** 渲染管线完成时回调本轮渲染对应的 content（供导出链路确认预览已追平目标内容） */
+  onContentRendered?: (content: string) => void
 }
 
 /**
  * 预览面板：把渲染管线（markdown → HTML → 学术启发式 → 编号 → KaTeX → Mermaid）
  * 委托给 core/previewDom —— 网页预览与扩展导出引擎共用同一份实现。
  */
-export default function PreviewPanel({ content, previewId, settings, a4Mode, onScrollContainerReady, onRendered }: PreviewPanelProps) {
+export default function PreviewPanel({ content, previewId, settings, a4Mode, onScrollContainerReady, onRendered, onContentRendered }: PreviewPanelProps) {
   const previewRef = useRef<HTMLDivElement>(null)
   const renderKeyRef = useRef(0) // bump on every render to avoid stale closures
 
@@ -36,13 +38,14 @@ export default function PreviewPanel({ content, previewId, settings, a4Mode, onS
     void task.then(() => {
       // Safety: if a new render started while we were running, do nothing here
       if (renderKeyRef.current !== key) return
+      onContentRendered?.(content)
       onRendered?.()
     })
 
     return () => {
       renderKeyRef.current++
     }
-  }, [content, settings, onRendered])
+  }, [content, settings, onRendered, onContentRendered])
 
   const styleVars = cssVarsFor(settings) as React.CSSProperties
 

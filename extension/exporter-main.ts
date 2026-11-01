@@ -12,13 +12,13 @@
 import './exporter.css'
 import { renderPreviewDom } from '../src/core/previewDom'
 import { smartFormatText } from '../src/core/formatter'
-import { resolveTemplateBase, cssVarsFor, normalizeDocSettings } from '../src/core/templates'
+import { resolveTemplateBase, cssVarsFor, normalizeDocSettings, injectCustomTemplates } from '../src/core/templates'
 import { runPreflight, type PreflightResult } from '../src/core/preflight'
 import { buildDocxBlob } from '../src/core/exporter'
 import { buildPdf, PdfExportError } from '../src/core/pdf/export'
 import { buildExportFilename } from '../src/core/filename'
 import { accountEnabled, requestExportTicket, signIn, type TicketResult } from '../src/core/account'
-import { takeExportJob, stageImport, loadQuickSettings, recordExportResult } from './src/storage'
+import { takeExportJob, stageImport, loadQuickSettings, recordExportResult, extensionTemplateStorage } from './src/storage'
 import { MarkDocExtError } from './src/errors'
 import type { ExportJob } from './src/types'
 
@@ -255,6 +255,12 @@ async function boot(): Promise<void> {
       job.markdown = smartFormatText(job.markdown)
     }
   } catch { /* 设置读取失败不阻断导出 */ }
+
+  // 自定义模板：chrome.storage → 本页 localStorage 镜像（core/resolveTemplateBase 读 localStorage，
+  // 此前扩展页永远读到空列表，自定义模板统一回退 general）
+  try {
+    injectCustomTemplates(await extensionTemplateStorage.listTemplates())
+  } catch { /* 非扩展页面环境忽略 */ }
 
   $('mode-label').textContent = `${MODE_LABEL[job.mode] ?? '文档'} · ${job.platform}`
   const meta = $('job-meta')

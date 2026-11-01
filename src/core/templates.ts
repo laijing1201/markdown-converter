@@ -177,10 +177,17 @@ export interface DocSettings {
 export const SETTINGS_SCHEMA_VERSION = 3
 export const SETTINGS_KEY = 'markdoc.settings.v3'
 
-/** 从系统模板种子生成完整设置（保留传入的目录/页码开关） */
+/** 用户显式设置过、切换模板时必须保留的偏好字段 */
+export type PreservedSettings = Pick<
+  DocSettings,
+  'includeToc' | 'includePageNumbers' | 'pageNumberAlign' | 'hideFirstPageNumber'
+    | 'headingNumbering' | 'documentTitle' | 'headerText' | 'footerText' | 'marginCustom'
+>
+
+/** 从系统模板种子生成完整设置（保留目录/页码开关与用户自定义的标题/页眉页脚/编号等偏好） */
 export function seedSettingsFromTemplate(
   id: TemplateId,
-  current?: Pick<DocSettings, 'includeToc' | 'includePageNumbers'>,
+  current?: Partial<PreservedSettings>,
 ): DocSettings {
   const t = TEMPLATE_CONFIGS[id]
   return {
@@ -199,13 +206,13 @@ export function seedSettingsFromTemplate(
     firstLineIndent: t.firstLineIndent,
     bodyAlign: t.bodyAlign,
     marginPreset: t.margin,
-    marginCustom: { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 },
-    headingNumbering: 'off',
-    documentTitle: '',
-    headerText: '',
-    footerText: '',
-    pageNumberAlign: 'center',
-    hideFirstPageNumber: false,
+    marginCustom: current?.marginCustom ?? { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 },
+    headingNumbering: current?.headingNumbering ?? 'off',
+    documentTitle: current?.documentTitle ?? '',
+    headerText: current?.headerText ?? '',
+    footerText: current?.footerText ?? '',
+    pageNumberAlign: current?.pageNumberAlign ?? 'center',
+    hideFirstPageNumber: current?.hideFirstPageNumber ?? false,
   }
 }
 
@@ -333,6 +340,13 @@ function persistCustomStore(store: CustomStore): { ok: boolean; error?: string }
 
 export function loadCustomTemplates(): CustomTemplate[] {
   return loadCustomStore().templates
+}
+
+/** 供非网页宿主（扩展导出页等）把自身存储的自定义模板注入 localStorage，供 resolveTemplateBase 读取 */
+export function injectCustomTemplates(list: CustomTemplate[]): void {
+  try {
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify({ schemaVersion: CUSTOM_SCHEMA_VERSION, templates: list }))
+  } catch { /* 存储不可用时忽略：自定义模板回退系统模板 */ }
 }
 
 export interface CustomTemplateOpResult {

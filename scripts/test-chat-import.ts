@@ -231,5 +231,83 @@ console.log('DeepSeek 分享导入')
   }
 }
 
+// ── 链接导入加固（2026-11：诚实失败 / 噪音剥离 / 逐条报告）───────────────────
+console.log('链接导入加固')
+{
+  const {
+    parseChatLinks,
+    firstChatLinkInLine,
+    detectChatPlatform,
+    classifyFetchedPage,
+    extractConversation,
+    importChatLinksWithReport,
+    importChatLinks,
+    ChatImportError,
+  } = await import('../src/core/chatImport')
+
+  // 粘贴噪音剥离
+  check('尾部中文句号剥离', (parseChatLinks('https://kimi.moonshot.cn/share/x1。')[0] ?? '') === 'https://kimi.moonshot.cn/share/x1', JSON.stringify(parseChatLinks('https://kimi.moonshot.cn/share/x1。')))
+  check('包裹括号/引号剥离', (parseChatLinks('（https://chatgpt.com/share/y2）')[0] ?? '') === 'https://chatgpt.com/share/y2', JSON.stringify(parseChatLinks('（https://chatgpt.com/share/y2）')))
+  check('行内混排提取首个链接', firstChatLinkInLine('刚才的对话：https://chat.deepseek.com/share/z3 请看') === 'https://chat.deepseek.com/share/z3')
+  check('无链接行返回 null', firstChatLinkInLine('这行没有链接') === null)
+  check('带尾标点仍能识别平台', detectChatPlatform('https://chat.deepseek.com/share/w4。')?.platform.id === 'deepseek')
+
+  // 抓取质量判定：拒绝把垃圾页当成功
+  const challenge = '<html><head><title>Just a moment...</title></head><body>Checking your browser before accessing</body></html>'
+  check('人机验证页判失败', classifyFetchedPage(challenge, 'https://x/share/1', 'https://x/share/1').ok === false)
+  const loginWall = '<html><head><title>登录 - 平台</title></head><body>请登录后查看</body></html>'
+  check('登录墙判失败', classifyFetchedPage(loginWall, 'https://x/share/1', 'https://x/share/1').ok === false)
+  const shell = '<html><head><title>分享</title></head><body><div id="root"></div><script src="app.js"></script></body></html>'
+  check('SPA 空壳判失败', classifyFetchedPage(shell, 'https://x/share/1', 'https://x/share/1').ok === false)
+  const homeredir = `<html><body>${'首页导航内容。'.repeat(100)}</body></html>`
+  check('跳转首页判失败', classifyFetchedPage(homeredir, 'https://x.com/', 'https://x.com/share/gone').ok === false)
+  const healthy = `<html><head><title>对话</title></head><body><article>${'这是很长的正文内容。'.repeat(40)}</article></body></html>`
+  check('正常页面放行', classifyFetchedPage(healthy, 'https://x/share/1', 'https://x/share/1').ok === true)
+
+  // window.__INITIAL_STATE__ 内嵌状态 + ai/bot 角色名兼容（Kimi/豆包风格）
+  const kimiLike = `<html><head><title>Kimi 分享</title></head><body><div id="app"></div><script>window.__INITIAL_STATE__=${JSON.stringify({
+    chat: { messages: [
+      { role: 'user', text: '帮我写周报' },
+      { role: 'ai', text: '好的，以下是周报内容，这一句足够长。' },
+    ] },
+  })};</script></body></html>`
+  const kimiConv = extractConversation(kimiLike, 'kimi')
+  check('INITIAL_STATE 提取对话', kimiConv !== null && kimiConv.messages.length === 2, JSON.stringify(kimiConv?.messages.length))
+  check('ai 角色映射为 assistant', kimiConv?.messages[1].role === 'assistant')
+  check('纯字符串 content 形状识别', kimiConv?.messages[0].content === '帮我写周报')
+
+  // 逐条失败报告：不吞每条原因
+  const originalFetch3 = globalThis.fetch
+  ;(globalThis as unknown as { fetch: unknown }).fetch = async (url: string) => {
+    if (String(url).endsWith('/good')) {
+      return new Response(`<html><head><title>好对话</title></head><body><script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
+        m: [{ role: 'assistant', content: { parts: ['这条成功了，内容足够长，能通过长度门槛。'] } }],
+      })}</script></body></html>`, { status: 200 })
+    }
+    if (String(url).endsWith('/challenged')) {
+      return new Response('<html><head><title>Just a moment...</title></head><body>challenge</body></html>', { status: 200 })
+    }
+    return new Response('<html><body>空</body></html>', { status: 200 })
+  }
+  try {
+    const { results, failures } = await importChatLinksWithReport([
+      'https://chat.deepseek.com/share/good',
+      'https://chat.deepseek.com/share/challenged',
+      'https://chat.deepseek.com/share/dead',
+    ])
+    check('逐条报告：1 成 2 败', results.length === 1 && failures.length === 2, `ok=${results.length} fail=${failures.length}`)
+    check('失败原因逐条保留', failures.some((f) => f.error.message.includes('人机验证')) && failures.some((f) => f.error.message.includes('空壳')), JSON.stringify(failures.map((f) => f.error.message)))
+    // 全部失败：importChatLinks 抛出首个具体原因（不再只是笼统汇总）
+    try {
+      await importChatLinks(['https://chat.deepseek.com/share/challenged'])
+      check('全失败抛出具体原因', false)
+    } catch (err) {
+      check('全失败抛出具体原因', err instanceof ChatImportError && err.message.includes('人机验证'), (err as Error).message)
+    }
+  } finally {
+    ;(globalThis as unknown as { fetch: unknown }).fetch = originalFetch3
+  }
+}
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`)
 process.exit(fail === 0 ? 0 : 1)

@@ -5,6 +5,11 @@
  *   - 表格行缺少末尾 | 或缺失单元格
  *
  * 设计为纯函数：粘贴片段和整篇文档都可以直接喂进来。
+ * 安全规则（回归保护）：合法内容绝不能被"修复"破坏 ——
+ *   1. $$ 公式块内部的行原样保留（合法 LaTeX 不补 $ 不补 **）；
+ *   2. 行内 $ 补全只在行内出现公式特征（^、_、\frac 等）时触发，
+ *      「请支付 $100」这类货币文本不动；
+ *   3. 表格修复覆盖「表头+分隔行+表体」的完整形态，分隔行不切断扫描。
  */
 
 export interface RepairFix {
@@ -16,6 +21,9 @@ export interface RepairResult {
   fixed: string
   fixes: RepairFix[]
 }
+
+/** 行内公式特征：出现这些记号时，奇数个 $ 才大概率是漏闭合的公式而非货币符号 */
+const MATH_SIGNAL = /\\frac|\\int|\\sum|\\sqrt|\\times|\\left|\\right|\\begin\{|\\end\{|\\alpha|\\beta|\\gamma|\\delta|\\pi|\\mu|\\lambda|\\omega|\^|_/
 
 /** 移除完整的行内代码 `...`（反引号数为偶时才可靠） */
 function removeCodeSpans(line: string): string {
@@ -47,6 +55,12 @@ function isTableRow(line: string): boolean {
   return true
 }
 
+/** 是否是表格分隔行（|---|:--:| 形态；独立的 --- 水平线不算） */
+function isSeparatorRow(line: string): boolean {
+  const t = line.trim()
+  return t.startsWith('|') && t.length >= 3 && /^[\s|:\-]+$/.test(t)
+}
+
 /** 一行表格的单元格数 */
 function tableCellCount(line: string): number {
   const t = line.trim()
@@ -60,6 +74,7 @@ export function repairAiMarkdown(text: string): RepairResult {
 
   const lines = text.split('\n')
   let inFence = false
+  let inBlockMath = false
   let blockMathTokens = 0
 
   for (let i = 0; i < lines.length; i++) {
@@ -70,7 +85,13 @@ export function repairAiMarkdown(text: string): RepairResult {
     }
     if (inFence) continue
 
-    blockMathTokens += (lines[i].match(/\$\$/g) || []).length
+    // $$ 块状态跟踪：奇数个定界符切换进出块
+    const mathDelims = (lines[i].match(/\$\$/g) || []).length
+    blockMathTokens += mathDelims
+    if (mathDelims % 2 !== 0) inBlockMath = !inBlockMath
+    // 公式块内部行：原样保留（合法 LaTeX 不补 $、不补 **、不补 `）
+    if (inBlockMath && mathDelims === 0) continue
+
     let line = lines[i]
 
     // 1. 标题 # 后缺空格："#标题" → "# 标题"
@@ -93,9 +114,11 @@ export function repairAiMarkdown(text: string): RepairResult {
       fixes.push({ line: i + 1, message: '补全未闭合的粗体 ** ' })
     }
 
-    // 4. 未闭合的行内公式
-    const dollars = countDollars(removeBlockMath(removeCodeSpans(line)))
-    if (dollars % 2 !== 0) {
+    // 4. 未闭合的行内公式：仅当行内带公式特征时才补，
+    //    避免把「请支付 $100」这类货币文本改坏成 $100$
+    const mathish = removeBlockMath(removeCodeSpans(line))
+    const dollars = countDollars(mathish)
+    if (dollars % 2 !== 0 && MATH_SIGNAL.test(mathish)) {
       line = `${line}$`
       fixes.push({ line: i + 1, message: '补全未闭合的行内公式 $ ' })
     }
@@ -103,19 +126,32 @@ export function repairAiMarkdown(text: string): RepairResult {
     lines[i] = line
   }
 
-  // 5. 表格修复：补末尾 | 与缺失单元格
+  // 5. 表格修复：补末尾 | 与缺失单元格（分隔行在扫描中穿越不切断；
+  //    表头列数以分隔行之前一行为基准，覆盖「表头+分隔行+单行表体」最常见形态）
   let i = 0
   while (i < lines.length) {
-    if (!isTableRow(lines[i])) {
+    if (!isTableRow(lines[i]) && !isSeparatorRow(lines[i])) {
       i++
       continue
     }
     let j = i
-    while (j + 1 < lines.length && isTableRow(lines[j + 1])) j++
+    while (j + 1 < lines.length && (isTableRow(lines[j + 1]) || isSeparatorRow(lines[j + 1]))) j++
 
-    if (j > i) {
-      const headerCount = tableCellCount(lines[i])
-      for (let k = i; k <= j; k++) {
+    const contentIdx: number[] = []
+    let sepIdx = -1
+    for (let k = i; k <= j; k++) {
+      if (isSeparatorRow(lines[k])) {
+        if (sepIdx < 0) sepIdx = k
+      } else {
+        contentIdx.push(k)
+      }
+    }
+    // 有分隔行的完整表格：≥1 行表体都修；无分隔行的裸行组保持旧行为（≥2 行才视为表格）
+    if ((sepIdx >= 0 && contentIdx.length >= 1) || (sepIdx < 0 && contentIdx.length >= 2)) {
+      const beforeSep = sepIdx >= 0 ? contentIdx.filter((k) => k < sepIdx) : []
+      const headerLine = lines[beforeSep.length > 0 ? beforeSep[beforeSep.length - 1] : contentIdx[0]]
+      const headerCount = tableCellCount(headerLine)
+      for (const k of contentIdx) {
         let t = lines[k].trimEnd()
         let changed = false
         if (!t.trim().endsWith('|')) {
@@ -126,7 +162,7 @@ export function repairAiMarkdown(text: string): RepairResult {
         let cells = tableCellCount(t)
         if (cells < headerCount) {
           while (cells < headerCount) {
-            t = t.replace(/\|\s*$/, ' | |')
+            t = t.replace(/\|\s*$/, '| |')
             cells++
           }
           fixes.push({ line: k + 1, message: '表格行补全缺失的空单元格' })
