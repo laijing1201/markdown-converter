@@ -166,14 +166,15 @@ async function fetchViaProxy(pageUrl: string, raw: boolean): Promise<FetchedPage
   }
   const bodyText = await res.text().catch(() => '')
   // 代理的业务错误统一放在 { error } 字段（HTTP 200/4xx 都可能），优先呈现给用户
-  let data: { kind?: 'html' | 'json'; html?: string; body?: string; finalUrl?: string; error?: string } = {}
+  let data: { kind?: 'html' | 'json'; html?: string; body?: string; finalUrl?: string; error?: string; hint?: string } = {}
   try {
     data = JSON.parse(bodyText) as typeof data
   } catch { /* 非 JSON 响应体走下面的状态码分支 */ }
   if (!res.ok || data.error) {
     throw new ChatImportError(
       data.error ?? `抓取服务返回 ${res.status}`,
-      bodyText.slice(0, 300),
+      // 代理给的建议（hint）优先作为 detail 展示给用户
+      data.hint ?? bodyText.slice(0, 300),
     )
   }
   if (raw) {

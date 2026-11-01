@@ -85,8 +85,8 @@ export function repairAiMarkdown(text: string): RepairResult {
     }
     if (inFence) continue
 
-    // $$ 块状态跟踪：奇数个定界符切换进出块
-    const mathDelims = (lines[i].match(/\$\$/g) || []).length
+    // $$ 块状态跟踪：奇数个定界符切换进出块（行内代码里的 $$ 不算定界符）
+    const mathDelims = (removeCodeSpans(lines[i]).match(/\$\$/g) || []).length
     blockMathTokens += mathDelims
     if (mathDelims % 2 !== 0) inBlockMath = !inBlockMath
     // 公式块内部行：原样保留（合法 LaTeX 不补 $、不补 **、不补 `）

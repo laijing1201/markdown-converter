@@ -222,10 +222,20 @@ console.log('智能排版增强能力')
   check('中文页码剔除', !pages.includes('第 3 页') && pages.includes('正文甲。'), pages)
   check('共 N 页剔除', !pages.includes('共 12 页'), pages)
   check('Page 4/10 剔除', !pages.includes('Page 4/10'), pages)
-  const longDoc = Array.from({ length: 18 }, (_, i) => `第${i + 1}页的正文内容，有标点。\nRepeated Running Header`).join('\n')
+  const longDoc = Array.from({ length: 12 }, (_, i) =>
+    Array.from({ length: 10 }, (_, k) => `第${i + 1}页第${k + 1}段：论证内容各不相同足够多样。`).join('\n') + '\nRepeated Running Header',
+  ).join('\n')
   const headerOut = smartFormatText(longDoc)
-  check('重复页眉剔除', !headerOut.includes('Repeated Running Header'), headerOut.slice(0, 160))
-  check('重复页眉不误删正文', headerOut.includes('正文内容，有标点。'), headerOut.slice(0, 160))
+  check('重复页眉剔除', !headerOut.includes('Repeated Running Header'), headerOut.slice(0, 200))
+  check('重复页眉不误删正文', headerOut.includes('第 1 页第 1 段：论证内容各不相同足够多样。'), headerOut.slice(0, 200))
+  // 高重复率正文绝不当页眉整篇删光（数据安全阀：去重行 <10 时跳过剔除）
+  const repetitive = Array.from({ length: 100 }, () => ['要点甲内容', '要点乙内容', '要点丙内容'].join('\n')).join('\n')
+  const repOut = smartFormatText(repetitive)
+  check('高重复率正文不整篇删除', repOut.includes('要点甲内容') && repOut.includes('要点丙内容'), `len=${repOut.length}`)
+  check('非空输入绝不输出空', repOut.trim().length > 0)
+  // 全部行都被判为噪音时回落原文（绝不返回空文档）
+  const onlyNoise = smartFormatText('1\n2\n3')
+  check('纯页码输入回落原文', onlyNoise === '1\n2\n3', onlyNoise)
 
   // 列表符号统一与任务清单
   const bullets = smartFormatText('– 第一项\n– 第二项\n• 第三项')

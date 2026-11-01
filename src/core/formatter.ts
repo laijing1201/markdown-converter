@@ -235,7 +235,10 @@ export function smartFormatText(text: string): string {
     }
   }
 
-  // 1b. 重复页眉/页脚剔除：同一短行出现 ≥3 次视为版式重复（要求文档足够长，避免误伤短文）
+  // 1b. 重复页眉/页脚剔除：同一短行出现 ≥3 次视为版式重复（要求文档足够长，避免误伤短文）。
+  //     三重安全阀（防数据丢失）：① 全文去重后仍有 ≥10 个不同行（真正 repetitive
+  //     的正文不当页眉删）；② 可剔除行占非空行比例 ≤15%（真实页眉每页一条约 1~5%）；
+  //     ③ 剔除后必须还剩内容——绝不整篇删光。
   {
     const counts = new Map<string, number>()
     for (let i = 0; i < step1.length; i++) {
@@ -247,13 +250,26 @@ export function smartFormatText(text: string): string {
     }
     const repeated = new Set([...counts.entries()].filter(([, n]) => n >= 3).map(([t]) => t))
     if (repeated.size > 0 && step1.length >= 30) {
-      for (let i = step1.length - 1; i >= 0; i--) {
-        if (fence1[i]) continue
-        const t = step1[i].trim()
-        // 列表 / 引用 / 表格 / 标题起始行绝不剔除
-        if (repeated.has(t) && !/^[#>*|+\-]/.test(t)) {
-          step1.splice(i, 1)
-          fence1.splice(i, 1)
+      const nonBlankTotal = step1.filter((l) => l.trim()).length
+      const distinct = new Set(step1.filter((l) => l.trim()).map((l) => l.trim())).size
+      if (distinct >= 10) {
+        const removableIdx: number[] = []
+        for (let i = 0; i < step1.length; i++) {
+          if (fence1[i]) continue
+          const t = step1[i].trim()
+          // 列表 / 引用 / 表格 / 标题起始行绝不剔除
+          if (repeated.has(t) && !/^[#>*|+\-]/.test(t)) removableIdx.push(i)
+        }
+        if (
+          removableIdx.length > 0 &&
+          removableIdx.length < nonBlankTotal &&
+          removableIdx.length / nonBlankTotal <= 0.15
+        ) {
+          for (let k = removableIdx.length - 1; k >= 0; k--) {
+            const idx = removableIdx[k]
+            step1.splice(idx, 1)
+            fence1.splice(idx, 1)
+          }
         }
       }
     }
@@ -651,7 +667,10 @@ export function smartFormatText(text: string): string {
     out.push(line)
   }
 
-  return out.join('\n')
+  const finalOut = out.join('\n')
+  // 全局数据安全网：非空输入绝不产出空结果（任何一步过度剔除都回落到原文）
+  if (text.trim() && !finalOut.trim()) return text
+  return finalOut
 }
 
 // ─── 通用辅助函数 ────────────────────────────────────────────────────────────

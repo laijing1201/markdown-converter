@@ -506,6 +506,8 @@ export default function App() {
   }, [])
 
   const handleDeepFixApplyAndExport = useCallback((result: { fixed: string; summary: string[] }) => {
+    // 空内容防御：修复结果为空时不进入导出链路（避免导出示例内容）
+    if (!result.fixed.trim()) return
     setMarkdownContent(result.fixed)
     showToast('🧩', result.summary[0] ?? '已应用 AI 内容修复', result.summary.slice(1, 4))
     // 等待预览渲染出与 result.fixed 一致的内容（onContentRendered 精确匹配），
