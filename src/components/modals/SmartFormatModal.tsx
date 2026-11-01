@@ -34,14 +34,16 @@ export default function SmartFormatModal({ onApply, onClose }: SmartFormatModalP
   }, [onApply])
 
   let statusText = '正在初始化全能排版引擎...'
-  if (progress > 5) statusText = '正在剔除页眉页脚与干扰字符...'
-  if (progress > 15) statusText = '正在进行 PDF 断行智能缝合...'
-  if (progress > 30) statusText = '正在进行中英文排版与标点规范化...'
-  if (progress > 45) statusText = '正在结合上下文推断多级标题与列表...'
-  if (progress > 60) statusText = '正在探测引用块与代码片段...'
-  if (progress > 75) statusText = '正在提取并组装纯文本数据表格...'
-  if (progress > 90) statusText = '正在美化超链接与参考文献...'
-  if (progress > 95) statusText = '结构重组完成，正在生成...'
+  if (progress > 5) statusText = '正在清理零宽字符、软连字符与全半角杂质...'
+  if (progress > 12) statusText = '正在剔除页眉页脚、页码与重复页眉...'
+  if (progress > 20) statusText = '正在进行 PDF 断行智能缝合（含连字符还原）...'
+  if (progress > 30) statusText = '正在探测代码片段（JSON / Python / JS / Shell）...'
+  if (progress > 40) statusText = '正在进行中英文混排规范化（盘古之白 / 全半角 / 标点）...'
+  if (progress > 52) statusText = '正在组装数据表格（竖线表格 / ASCII 框线表格还原）...'
+  if (progress > 62) statusText = '正在结合上下文推断多级标题、列表与任务清单...'
+  if (progress > 74) statusText = '正在识别引用块、参考文献与分隔线...'
+  if (progress > 84) statusText = '正在美化超链接（自动剥离尾部标点）...'
+  if (progress > 94) statusText = '结构重组完成，正在生成...'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">

@@ -149,6 +149,8 @@ export interface ExtQuickSettings {
   includePageNumbers: boolean
   includeUserMessages: boolean
   includeSources: boolean
+  /** 导出前先过一遍智能排版引擎（断行缝合 / 页眉页脚剔除 / 层级与表格推断） */
+  smartFormat: boolean
   /** 整段对话的文档风格 */
   conversationStyle: ConversationStyle
   /** MarkDoc 网页版地址（「在 MarkDoc 中编辑」桥接） */
@@ -162,6 +164,7 @@ export const DEFAULT_QUICK_SETTINGS: ExtQuickSettings = {
   includePageNumbers: true,
   includeUserMessages: true,
   includeSources: true,
+  smartFormat: false,
   conversationStyle: 'dialogue',
   markdocUrl: 'https://laijing1201.github.io/markdown-converter',
 }

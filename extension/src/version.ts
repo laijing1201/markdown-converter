@@ -6,7 +6,7 @@
  * 诊断信息必须带全三类版本。
  */
 
-export const EXT_VERSION = '0.1.0'
+export const EXT_VERSION = '0.2.0'
 
 /** 平台 Adapter 版本（selector/提取逻辑改版时递增） */
 export const ADAPTER_VERSIONS: Record<string, number> = {

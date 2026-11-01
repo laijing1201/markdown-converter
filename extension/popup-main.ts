@@ -156,6 +156,7 @@ async function initSettings(): Promise<void> {
   bind('opt-sources', 'includeSources')
   bind('opt-toc', 'includeToc')
   bind('opt-pagenum', 'includePageNumbers')
+  bind('opt-smartformat', 'smartFormat')
 
   const radios = document.querySelectorAll<HTMLInputElement>('input[name="default-target"]')
   radios.forEach((r) => {

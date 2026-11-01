@@ -199,6 +199,103 @@ console.log('智能排版安全规则')
   check('图题行保留', extOut.includes('图：结构'))
 }
 
+// ── 智能排版增强能力（2026-11 扩容：缝合/剔噪/结构/表格/URL）──────────────────
+console.log('智能排版增强能力')
+{
+  const { smartFormatText } = await import('../src/core/formatter')
+
+  // 断行缝合：中文直连（不插空格）、英文补空格
+  const cjkJoin = smartFormatText('这是一段没有标点的\n中文续行内容')
+  check('中文断行直连不插空格', cjkJoin.includes('这是一段没有标点的中文续行内容'), cjkJoin)
+  const enJoin = smartFormatText('This is the first\npart of the sentence')
+  check('英文断行补空格', enJoin.includes('This is the first part of the sentence'), enJoin)
+  // PDF 断词连字符还原；过短前缀（e- / mail）保留连字符
+  const hyphen = smartFormatText('This is a commu-\nnication tool')
+  check('PDF断词连字符还原', hyphen.includes('communication tool'), hyphen)
+  const eMail = smartFormatText('Send it via e-\nmail please')
+  check('过短前缀保留连字符', eMail.includes('e-mail please'), eMail)
+  const soft = smartFormatText('communi\u00ADcation is key')
+  check('软连字符清理', soft.includes('communication is key'), soft)
+
+  // 页眉页脚剔除扩容：中文页码变体 + 重复页眉
+  const pages = smartFormatText('正文甲。\n第 3 页\n正文乙。\n共 12 页\n正文丙。\nPage 4/10\n正文丁。')
+  check('中文页码剔除', !pages.includes('第 3 页') && pages.includes('正文甲。'), pages)
+  check('共 N 页剔除', !pages.includes('共 12 页'), pages)
+  check('Page 4/10 剔除', !pages.includes('Page 4/10'), pages)
+  const longDoc = Array.from({ length: 18 }, (_, i) => `第${i + 1}页的正文内容，有标点。\nRepeated Running Header`).join('\n')
+  const headerOut = smartFormatText(longDoc)
+  check('重复页眉剔除', !headerOut.includes('Repeated Running Header'), headerOut.slice(0, 160))
+  check('重复页眉不误删正文', headerOut.includes('正文内容，有标点。'), headerOut.slice(0, 160))
+
+  // 列表符号统一与任务清单
+  const bullets = smartFormatText('– 第一项\n– 第二项\n• 第三项')
+  check('en-dash 项目符号统一', bullets.includes('- 第一项') && bullets.includes('- 第二项') && bullets.includes('- 第三项'), bullets)
+  const tasks = smartFormatText('□ 待办事项\n☑ 已完成事项\n✗ 未通过项')
+  check('任务清单推断', tasks.includes('- [ ] 待办事项') && tasks.includes('- [x] 已完成事项') && tasks.includes('- [ ] 未通过项'), tasks)
+  const notTask = smartFormatText('[x](https://example.com) 是链接')
+  check('链接不误判任务清单', !notTask.includes('- [x]'), notTask)
+
+  // 标题推断扩容：罗马数字 / 章节关键词 / 全大写 / Setext / 无空格序号
+  const roman = smartFormatText('I. Introduction\n\n正文内容很长很长。')
+  check('罗马数字标题', roman.includes('### I. Introduction'), roman)
+  const kw = smartFormatText('摘  要\n\n本文研究了智能排版。\n\nAbstract\n\nThis paper studies typesetting.\n\n参考文献\n\n[1] Zhang, et al. 2024.')
+  check('中文关键词标题（字间空白折叠）', kw.includes('## 摘要'), kw)
+  check('英文关键词标题', kw.includes('## Abstract'), kw)
+  check('参考文献标题', kw.includes('## 参考文献'), kw)
+  const caps = smartFormatText('CONCLUSION AND FUTURE WORK\n\n正文很长。')
+  check('全大写英文标题', caps.includes('### CONCLUSION AND FUTURE WORK'), caps)
+  const setext = smartFormatText('主标题文字\n=====\n\n正文开始。')
+  check('Setext 标题转换', setext.includes('# 主标题文字'), setext)
+  const noSpaceNum = smartFormatText('1.第一点说明\n2.第二点说明')
+  check('无空格序号转标题', noSpaceNum.includes('## 1.第一点说明') && noSpaceNum.includes('## 2.第二点说明'), noSpaceNum)
+  const decimal = smartFormatText('圆周率是3.14不是3.15')
+  check('小数不误判为序号', !decimal.includes('#'), decimal)
+
+  // 分隔线变体
+  const hr = smartFormatText('上文。\n\n——————\n\n下文。')
+  check('长破折号分隔线转 hr', hr.includes('上文。\n\n---\n\n下文。'), hr)
+
+  // ASCII 框线表格还原
+  const ascii = smartFormatText('+-------+-------+\n| 名称 | 数值 |\n+-------+-------+\n| 甲 | 1 |\n| 乙 | 2 |\n+-------+-------+')
+  check('ASCII 表格转 Markdown 表格', ascii.includes('| 名称 | 数值 |') && ascii.includes('|---|---|') && ascii.includes('| 乙 | 2 |'), ascii)
+  check('ASCII 边框不再残留', !ascii.includes('+--'), ascii)
+
+  // 原生表格缺分隔线自动补齐
+  const missingSep = smartFormatText('| 列A | 列B |\n| a1 | b1 |\n| a2 | b2 |')
+  check('缺分隔线自动补齐', missingSep.split('\n').filter(l => l.startsWith('|---')).length === 1, missingSep)
+
+  // 中英文排版规范化
+  const punct = smartFormatText('首先,我们看数据;然后分析:结果如何?很好!')
+  check('半角标点转全角', punct.includes('首先，我们看数据；然后分析：结果如何？很好！'), punct)
+  const pangu = smartFormatText('使用Python和GPT-4完成智能排版,实测效率提升5倍。')
+  check('盘古之白', pangu.includes('使用 Python 和 GPT-4 完成智能排版，实测效率提升 5 倍。'), pangu)
+  const fullwidth = smartFormatText('第１章共１２３页')
+  check('全角字母数字转半角', fullwidth.includes('第 1 章共 123 页'), fullwidth)
+  const protect = smartFormatText('使用`中文var`变量,以及 [链接](https://x.com/a) 即可')
+  check('行内代码内容不受影响', protect.includes('`中文var`'), protect)
+  check('链接目标不受影响', protect.includes('](https://x.com/a)'), protect)
+
+  // 代码块探测扩容：console / shell
+  const js = smartFormatText('console.log("a")\nconsole.log("b")\n\n正文说明。')
+  check('console 代码块识别', js.includes('```js\nconsole.log("a")\nconsole.log("b")\n```'), js)
+  const sh = smartFormatText('$ npm install foo\n$ npm run build\n\n安装完成。')
+  check('shell 代码块识别', sh.includes('```bash\n$ npm install foo\n$ npm run build\n```'), sh)
+
+  // 裸链接美化与上下文保护
+  const url = smartFormatText('详见 https://example.com/a。')
+  check('裸链接自动包裹且剥离尾标点', url.includes('[https://example.com/a](https://example.com/a)。'), url)
+  const href = smartFormatText('<a href="https://x.com/a">链接</a>')
+  check('HTML 属性内 URL 不包裹', href === '<a href="https://x.com/a">链接</a>', href)
+  const refdef = smartFormatText('[1]: https://example.com/paper')
+  check('引用定义行原样保留', refdef === '[1]: https://example.com/paper', refdef)
+
+  // 空行折叠（围栏外）
+  const blanks = smartFormatText('段落一\n\n\n\n\n段落二')
+  check('连续空行折叠', blanks === '段落一\n\n段落二', blanks)
+  const fenceBlanks = smartFormatText('```text\na\n\n\n\nb\n```\n\n\n\n段落二')
+  check('围栏内空行不折叠', fenceBlanks.includes('a\n\n\n\nb') && !fenceBlanks.includes('\n\n\n\n段落'), fenceBlanks)
+}
+
 // ── CJK 邻接加粗（**标签：**后紧跟汉字）──────────────────────────────────────
 console.log('CJK 邻接加粗')
 {

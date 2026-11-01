@@ -106,7 +106,7 @@ export default function Toolbar({
         <button
           onClick={onSmartFormat}
           className={ghostBtn}
-          title="智能识别并转换普通序号为 Markdown 标题"
+          title="一键结构化：PDF 断行缝合（含连字符还原）、页眉页脚剔除、多级标题/列表/任务清单推断、纯文本与 ASCII 表格组装、中英文混排规范化、代码块识别与链接美化"
         >
           <SparklesIcon /> 智能排版
         </button>

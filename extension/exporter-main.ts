@@ -11,6 +11,7 @@
 
 import './exporter.css'
 import { renderPreviewDom } from '../src/core/previewDom'
+import { smartFormatText } from '../src/core/formatter'
 import { resolveTemplateBase, cssVarsFor, normalizeDocSettings } from '../src/core/templates'
 import { runPreflight, type PreflightResult } from '../src/core/preflight'
 import { buildDocxBlob } from '../src/core/exporter'
@@ -246,6 +247,14 @@ async function boot(): Promise<void> {
   }
   const job: ExportJob = { ...raw, settings: normalizeDocSettings(raw.settings) }
   currentJob = job
+
+  // 智能排版（popup 快速设置开关，默认关）：导出前先过一遍排版引擎，
+  // 与网页版「✨ 智能排版」同源同一实现（core/formatter）
+  try {
+    if ((await loadQuickSettings()).smartFormat) {
+      job.markdown = smartFormatText(job.markdown)
+    }
+  } catch { /* 设置读取失败不阻断导出 */ }
 
   $('mode-label').textContent = `${MODE_LABEL[job.mode] ?? '文档'} · ${job.platform}`
   const meta = $('job-meta')
